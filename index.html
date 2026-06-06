@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convertitore XBRL in HTML/PDF</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            body * { visibility: hidden; }
+            #printableArea, #printableArea * { visibility: visible; }
+            #printableArea { position: absolute; left: 0; top: 0; width: 100%; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+
+    <div class="max-w-6xl mx-auto p-6 no-print">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-blue-900 mb-2">Convertitore di Bilanci XBRL</h1>
+            <p class="text-gray-600">Carica il tuo file .xbrl o .xml per visualizzare i dati del bilancio ed esportarli in HTML o PDF.</p>
+        </header>
+
+        <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex-1 w-full">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Seleziona il file XBRL</label>
+                <input type="file" id="xbrlFile" accept=".xbrl,.xml" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+            </div>
+            
+            <div class="flex gap-3 w-full md:w-auto justify-end">
+                <button id="btnHtml" disabled class="px-5 py-2.5 bg-green-600 text-white font-medium rounded-md shadow hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition flex items-center gap-2">
+                    Visualizza Dati
+                </button>
+                <button id="btnExportHtml" disabled class="px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-md shadow hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition">
+                    Esporta HTML
+                </button>
+                <button id="btnExportPdf" disabled class="px-5 py-2.5 bg-red-600 text-white font-medium rounded-md shadow hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition">
+                    Salva in PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <main class="max-w-6xl mx-auto p-6">
+        <div id="printableArea" class="bg-white p-8 rounded-xl shadow-md border border-gray-200 hidden">
+            <div class="border-b pb-4 mb-6">
+                <h2 class="text-2xl font-bold text-gray-900" id="docTitle">Rendiconto Finanziario / Bilancio</h2>
+                <p class="text-sm text-gray-500 mt-1">Documento generato da parser XBRL Client-Side</p>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b-2 border-gray-300 bg-gray-50 text-gray-700 uppercase text-xs tracking-wider">
+                            <th class="py-3 px-4 font-semibold">Voce di Bilancio (Tag)</th>
+                            <th class="py-3 px-4 font-semibold">Contesto / Periodo</th>
+                            <th class="py-3 px-4 font-semibold text-right">Valore</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-gray-200 text-sm">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div id="emptyState" class="text-center py-12 no-print">
+            <p class="text-gray-400 italic">Nessun file caricato. Seleziona un file XBRL per iniziare.</p>
+        </div>
+    </main>
+
+    <script>
+        let xbrlContent = "";
+        let parsedData = [];
+
+        document.getElementById('xbrlFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                xbrlContent = evt.target.result;
+                document.getElementById('btnHtml').disabled = false;
+            };
+            reader.readAsText(file);
+        });
+
+        document.getElementById('btnHtml').addEventListener('click', function() {
+            if (!xbrlContent) return;
+
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xbrlContent, "text/xml");
+            
+            // Trova tutti gli elementi nel file XBRL. 
+            // Nei bilanci reali, i fatti finanziari possiedono quasi sempre l'attributo 'contextRef'
+            const allElements = xmlDoc.querySelectorAll('*');
+            parsedData = [];
+
+            allElements.forEach(el => {
+                if (el.hasAttribute('contextRef')) {
+                    const tagName = el.localName; // Rimuove il prefisso del namespace (es. itcc-ci:)
+                    const context = el.getAttribute('contextRef');
+                    const value = el.textContent.trim();
+                    
+                    // Evita di inserire nodi vuoti o strutturali
+                    if (value !== "") {
+                        parsedData.push({ tagName, context, value });
+                    }
+                }
+            });
+
+            renderTable(parsedData);
+        });
+
+        function renderTable(data) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = "";
+
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-red-500">Nessun dato finanziario compatibile trovato nel file.</td></tr>`;
+            } else {
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.className = "hover:bg-gray-50 transition";
+                    
+                    // Formattazione per i numeri se applicabile
+                    let formattedValue = item.value;
+                    if (!isNaN(item.value) && item.value !== "") {
+                        formattedValue = new Intl.NumberFormat('it-IT').format(item.value);
+                    }
+
+                    row.innerHTML = `
+                        <td class="py-3 px-4 font-mono text-xs text-indigo-700">${item.tagName}</td>
+                        <td class="py-3 px-4 text-gray-600">${item.context}</td>
+                        <td class="py-3 px-4 text-right font-semibold text-gray-900">${formattedValue}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+
+            document.getElementById('printableArea').classList.remove('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('btnExportHtml').disabled = false;
+            document.getElementById('btnExportPdf').disabled = false;
+        }
+
+        // Esportazione HTML pulito
+        document.getElementById('btnExportHtml').addEventListener('click', function() {
+            const tableHtml = document.getElementById('printableArea').innerHTML;
+            const fullHtmlPage = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Esportazione Bilancio</title>
+                    <style>
+                        body { font-family: sans-serif; padding: 30px; color: #333; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border-bottom: 1px solid #ddd; padding: 10px; text-align: left; }
+                        th { background-color: #f5f5f5; }
+                        .text-right { text-align: right; }
+                        .font-mono { font-family: monospace; color: #4338ca; }
+                    </style>
+                </head>
+                <body>
+                    ${tableHtml}
+                </body>
+                </html>
+            `;
+
+            const blob = new Blob([fullHtmlPage], { type: 'text/html' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'bilancio_convertito.html';
+            link.click();
+        });
+
+        // Esportazione PDF nativa (sfrutta la finestra di stampa ottimizzata CSS)
+        document.getElementById('btnExportPdf').addEventListener('click', function() {
+            window.print();
+        });
+    </script>
+</body>
+</html>
