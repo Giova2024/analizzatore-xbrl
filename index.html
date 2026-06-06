@@ -1,184 +1,1290 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Convertitore XBRL in HTML/PDF</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @media print {
-            body * { visibility: hidden; }
-            #printableArea, #printableArea * { visibility: visible; }
-            #printableArea { position: absolute; left: 0; top: 0; width: 100%; }
-            .no-print { display: none; }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analizzatore Bilanci XBRL · Analisi Finanziaria & CCII</title>
+
+<!-- ============================ LIBRERIE ESTERNE (CDN) ============================ -->
+<!-- Tailwind CSS (utility-first) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Chart.js per il grafico interattivo dei flussi di cassa -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- Tipografia: Fraunces (display), Manrope (testo), JetBrains Mono (numeri) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script>
+// Configurazione tema Tailwind: palette "blu notte / grigio chiaro / verde-rosso KPI"
+// (il controllo typeof evita un crash se la CDN di Tailwind non è ancora/non viene caricata)
+if (typeof tailwind !== 'undefined') tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        display: ['Fraunces', 'serif'],
+        sans: ['Manrope', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
+      },
+      colors: {
+        navy:   { 900:'#070d1b', 850:'#0b1220', 800:'#0f1a30', 750:'#13213d', 700:'#1b2c4d', 600:'#27406e' },
+        ink:    { 100:'#e8eefb', 200:'#c7d2ea', 300:'#94a3c4', 400:'#6b7ba3' },
+        ok:     { DEFAULT:'#10b981', soft:'#065f46' },
+        warn:   { DEFAULT:'#f59e0b', soft:'#78350f' },
+        bad:    { DEFAULT:'#ef4444', soft:'#7f1d1d' },
+        accent: { DEFAULT:'#38bdf8', soft:'#0c4a6e' },
+      },
+    }
+  }
+}
+</script>
+
+<style>
+  html { scroll-behavior:smooth; }
+  body { background: radial-gradient(1200px 600px at 80% -10%, #13213d 0%, #0b1220 45%, #070d1b 100%); }
+  .num { font-family:'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+  .card { background: linear-gradient(180deg, rgba(19,33,61,.85), rgba(15,26,48,.85)); border:1px solid rgba(56,189,248,.10); backdrop-filter: blur(6px); }
+  .tab-btn.active { background: linear-gradient(180deg,#27406e,#1b2c4d); color:#e8eefb; border-color: rgba(56,189,248,.45); box-shadow: 0 6px 20px -8px rgba(56,189,248,.5); }
+  .badge { font-family:'JetBrains Mono', monospace; letter-spacing:.02em; }
+  /* Scrollbar discreta */
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:#0b1220}
+  ::-webkit-scrollbar-thumb{background:#1b2c4d;border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#27406e}
+  input[type=number]{ -moz-appearance:textfield; }
+  .fade-in{ animation: fade .45s ease both; }
+  @keyframes fade { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
+  .hl { background: linear-gradient(transparent 60%, rgba(56,189,248,.18) 0); }
+</style>
 </head>
-<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
 
-    <div class="max-w-6xl mx-auto p-6 no-print">
-        <header class="mb-8 text-center">
-            <h1 class="text-3xl font-bold text-blue-900 mb-2">Convertitore di Bilanci XBRL</h1>
-            <p class="text-gray-600">Carica il tuo file .xbrl o .xml per visualizzare i dati del bilancio ed esportarli in HTML o PDF.</p>
-        </header>
+<body class="font-sans text-ink-100 min-h-screen">
 
-        <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div class="flex-1 w-full">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Seleziona il file XBRL</label>
-                <input type="file" id="xbrlFile" accept=".xbrl,.xml" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
-            </div>
-            
-            <div class="flex gap-3 w-full md:w-auto justify-end">
-                <button id="btnHtml" disabled class="px-5 py-2.5 bg-green-600 text-white font-medium rounded-md shadow hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition flex items-center gap-2">
-                    Visualizza Dati
-                </button>
-                <button id="btnExportHtml" disabled class="px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-md shadow hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition">
-                    Esporta HTML
-                </button>
-                <button id="btnExportPdf" disabled class="px-5 py-2.5 bg-red-600 text-white font-medium rounded-md shadow hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition">
-                    Salva in PDF
-                </button>
-            </div>
-        </div>
+<!-- ===================================================================== -->
+<!-- HEADER                                                                 -->
+<!-- ===================================================================== -->
+<header class="border-b border-white/5 sticky top-0 z-30 backdrop-blur-md bg-navy-900/70">
+  <div class="max-w-[1400px] mx-auto px-5 py-3 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-navy-600 grid place-items-center shadow-lg shadow-accent/20">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#06121f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 5-6"/></svg>
+      </div>
+      <div>
+        <h1 class="font-display text-xl leading-none text-ink-100">Analizzatore Bilanci <span class="text-accent">XBRL</span></h1>
+        <p class="text-[11px] text-ink-400 mt-1 tracking-wide">Analisi finanziaria · Codice della Crisi (CCII) · Cash Flow Forecast — tutto lato client</p>
+      </div>
+    </div>
+    <div id="companyTag" class="hidden sm:flex flex-col items-end text-right">
+      <span id="companyName" class="text-sm font-semibold text-ink-200 max-w-[280px] truncate"></span>
+      <span id="companyYears" class="num text-[11px] text-ink-400"></span>
+    </div>
+  </div>
+</header>
+
+<div class="max-w-[1400px] mx-auto px-5 py-6 grid grid-cols-12 gap-6">
+
+  <!-- ===================================================================== -->
+  <!-- SIDEBAR : upload + parametri                                            -->
+  <!-- ===================================================================== -->
+  <aside class="col-span-12 lg:col-span-3 space-y-5">
+
+    <!-- Caricamento file -->
+    <div class="card rounded-2xl p-4">
+      <h2 class="text-xs uppercase tracking-[.2em] text-ink-400 mb-3">1 · Importa bilancio</h2>
+      <label id="dropZone" for="fileInput"
+        class="block cursor-pointer rounded-xl border-2 border-dashed border-white/15 hover:border-accent/60 transition-colors px-4 py-6 text-center">
+        <svg class="mx-auto mb-2 text-accent" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+        <p class="text-sm font-semibold text-ink-200">Trascina o seleziona</p>
+        <p class="text-[11px] text-ink-400 mt-1">File <span class="num">.xbrl</span> / <span class="num">.xml</span> (formato Infocamere itcc-ci)</p>
+      </label>
+      <input id="fileInput" type="file" accept=".xbrl,.xml,text/xml,application/xml" class="hidden">
+      <button id="demoBtn" class="mt-3 w-full text-[12px] py-2 rounded-lg bg-navy-700 hover:bg-navy-600 transition-colors text-ink-200">
+        ▷ Carica un bilancio di esempio
+      </button>
+      <p id="parseStatus" class="text-[11px] mt-3 text-ink-400 min-h-[16px]"></p>
     </div>
 
-    <main class="max-w-6xl mx-auto p-6">
-        <div id="printableArea" class="bg-white p-8 rounded-xl shadow-md border border-gray-200 hidden">
-            <div class="border-b pb-4 mb-6">
-                <h2 class="text-2xl font-bold text-gray-900" id="docTitle">Rendiconto Finanziario / Bilancio</h2>
-                <p class="text-sm text-gray-500 mt-1">Documento generato da parser XBRL Client-Side</p>
-            </div>
-            
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="border-b-2 border-gray-300 bg-gray-50 text-gray-700 uppercase text-xs tracking-wider">
-                            <th class="py-3 px-4 font-semibold">Voce di Bilancio (Tag)</th>
-                            <th class="py-3 px-4 font-semibold">Contesto / Periodo</th>
-                            <th class="py-3 px-4 font-semibold text-right">Valore</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody" class="divide-y divide-gray-200 text-sm">
-                        </tbody>
-                </table>
-            </div>
+    <!-- Settore CCII -->
+    <div class="card rounded-2xl p-4">
+      <h2 class="text-xs uppercase tracking-[.2em] text-ink-400 mb-3">2 · Settore (soglie CCII)</h2>
+      <select id="sectorSel" class="w-full bg-navy-800 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-ink-100 focus:outline-none focus:border-accent/60"></select>
+      <p class="text-[10px] text-ink-400 mt-2 leading-snug">Soglie di allerta CNDCEC (doc. 20/10/2019), differenziate per macrosettore ISTAT.</p>
+    </div>
+
+    <!-- Parametri forecast -->
+    <div class="card rounded-2xl p-4">
+      <h2 class="text-xs uppercase tracking-[.2em] text-ink-400 mb-3">3 · Parametri forecast 12 mesi</h2>
+      <div class="space-y-3">
+        <div>
+          <label class="flex justify-between text-[12px] text-ink-300 mb-1"><span>Crescita ricavi annua</span><span class="num text-accent" id="lblGrowth">+3%</span></label>
+          <input id="pGrowth" type="range" min="-30" max="40" value="3" step="1" class="w-full accent-accent">
         </div>
-        
-        <div id="emptyState" class="text-center py-12 no-print">
-            <p class="text-gray-400 italic">Nessun file caricato. Seleziona un file XBRL per iniziare.</p>
+        <div>
+          <label class="flex justify-between text-[12px] text-ink-300 mb-1"><span>Variazione costi annua</span><span class="num text-warn" id="lblCost">+2%</span></label>
+          <input id="pCost" type="range" min="-30" max="40" value="2" step="1" class="w-full accent-warn">
         </div>
-    </main>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[12px] text-ink-300 mb-1">Incasso clienti (gg)</label>
+            <input id="pDSO" type="number" min="0" max="360" value="90" class="num w-full bg-navy-800 border border-white/10 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-accent/60">
+          </div>
+          <div>
+            <label class="block text-[12px] text-ink-300 mb-1">Pagam. fornitori (gg)</label>
+            <input id="pDPO" type="number" min="0" max="360" value="75" class="num w-full bg-navy-800 border border-white/10 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-accent/60">
+          </div>
+        </div>
+      </div>
+      <p class="text-[10px] text-ink-400 mt-3 leading-snug">I parametri ricalcolano in tempo reale forecast, grafico e DSCR stimato.</p>
+    </div>
 
-    <script>
-        let xbrlContent = "";
-        let parsedData = [];
+    <div class="text-[10px] text-ink-400 leading-snug px-1">
+      <p>⚠︎ Elaborazione 100% nel browser: nessun dato lascia il dispositivo. Le valutazioni sono uno strumento di supporto e non sostituiscono il giudizio professionale.</p>
+    </div>
+  </aside>
 
-        document.getElementById('xbrlFile').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+  <!-- ===================================================================== -->
+  <!-- MAIN                                                                   -->
+  <!-- ===================================================================== -->
+  <main class="col-span-12 lg:col-span-9">
 
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                xbrlContent = evt.target.result;
-                document.getElementById('btnHtml').disabled = false;
-            };
-            reader.readAsText(file);
-        });
+    <!-- Stato iniziale (nessun file) -->
+    <div id="emptyState" class="card rounded-2xl p-10 text-center">
+      <div class="mx-auto w-16 h-16 rounded-2xl bg-navy-700 grid place-items-center mb-4">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>
+      </div>
+      <h2 class="font-display text-2xl mb-2">Nessun bilancio caricato</h2>
+      <p class="text-ink-300 max-w-lg mx-auto text-sm">Importa un file XBRL Infocamere (<span class="num">itcc-ci</span>) dalla barra laterale, oppure carica l'esempio per esplorare dashboard, indici, rendiconto finanziario, indicatori CCII, forecast di cassa e relazione automatica.</p>
+    </div>
 
-        document.getElementById('btnHtml').addEventListener('click', function() {
-            if (!xbrlContent) return;
+    <!-- Contenuto analisi -->
+    <div id="content" class="hidden">
 
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(xbrlContent, "text/xml");
-            
-            // Trova tutti gli elementi nel file XBRL. 
-            // Nei bilanci reali, i fatti finanziari possiedono quasi sempre l'attributo 'contextRef'
-            const allElements = xmlDoc.querySelectorAll('*');
-            parsedData = [];
+      <!-- TABS -->
+      <nav class="flex flex-wrap gap-2 mb-5">
+        <button data-tab="dash"      class="tab-btn active px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">① Dashboard &amp; KPI</button>
+        <button data-tab="indici"    class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">② Riclassificazione &amp; Indici</button>
+        <button data-tab="rendi"     class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">③ Rendiconto Finanziario</button>
+        <button data-tab="ccii"      class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">④ Codice della Crisi</button>
+        <button data-tab="forecast"  class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">⑤ Cash Flow Forecast</button>
+        <button data-tab="report"    class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">⑥ Relazione Finale</button>
+      </nav>
 
-            allElements.forEach(el => {
-                if (el.hasAttribute('contextRef')) {
-                    const tagName = el.localName; // Rimuove il prefisso del namespace (es. itcc-ci:)
-                    const context = el.getAttribute('contextRef');
-                    const value = el.textContent.trim();
-                    
-                    // Evita di inserire nodi vuoti o strutturali
-                    if (value !== "") {
-                        parsedData.push({ tagName, context, value });
-                    }
-                }
-            });
+      <!-- PANE: DASHBOARD -->
+      <section data-pane="dash" class="pane fade-in space-y-5"></section>
+      <!-- PANE: INDICI -->
+      <section data-pane="indici" class="pane hidden space-y-5"></section>
+      <!-- PANE: RENDICONTO -->
+      <section data-pane="rendi" class="pane hidden space-y-5"></section>
+      <!-- PANE: CCII -->
+      <section data-pane="ccii" class="pane hidden space-y-5"></section>
+      <!-- PANE: FORECAST -->
+      <section data-pane="forecast" class="pane hidden space-y-5"></section>
+      <!-- PANE: REPORT -->
+      <section data-pane="report" class="pane hidden space-y-5"></section>
 
-            renderTable(parsedData);
-        });
+    </div>
+  </main>
+</div>
 
-        function renderTable(data) {
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = "";
+<footer class="max-w-[1400px] mx-auto px-5 pb-10 text-[11px] text-ink-400">
+  Analizzatore XBRL — single-file, client-side. Tassonomia di riferimento: <span class="num">itcc-ci</span> (Infocamere). Soglie CCII: CNDCEC, doc. 20 ottobre 2019.
+</footer>
 
-            if (data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-red-500">Nessun dato finanziario compatibile trovato nel file.</td></tr>`;
-            } else {
-                data.forEach(item => {
-                    const row = document.createElement('tr');
-                    row.className = "hover:bg-gray-50 transition";
-                    
-                    // Formattazione per i numeri se applicabile
-                    let formattedValue = item.value;
-                    if (!isNaN(item.value) && item.value !== "") {
-                        formattedValue = new Intl.NumberFormat('it-IT').format(item.value);
-                    }
+<script>
+/* ============================================================================
+   ANALIZZATORE BILANCI XBRL — LOGICA APPLICATIVA
+   Tutto il codice gira lato client. Nessuna chiamata di rete sui dati.
+   ============================================================================ */
 
-                    row.innerHTML = `
-                        <td class="py-3 px-4 font-mono text-xs text-indigo-700">${item.tagName}</td>
-                        <td class="py-3 px-4 text-gray-600">${item.context}</td>
-                        <td class="py-3 px-4 text-right font-semibold text-gray-900">${formattedValue}</td>
-                    `;
-                    tbody.appendChild(row);
-                });
-            }
+/* ----------------------------------------------------------------------------
+   0) TABELLA SOGLIE SETTORIALI CCII (CNDCEC, 20/10/2019)
+   Per ciascun macrosettore i 5 valori soglia (in %):
+   of  = Oneri finanziari / Ricavi            -> ALERT se valore >= soglia
+   pn  = Patrimonio netto / Debiti totali     -> ALERT se valore <= soglia
+   liq = Attività a breve / Passività a breve -> ALERT se valore <= soglia
+   cf  = Cash flow / Attivo                    -> ALERT se valore <= soglia
+   tt  = (Deb. previdenziali+tributari)/Attivo -> ALERT se valore >= soglia
+---------------------------------------------------------------------------- */
+const SETTORI_CCII = [
+  { k:'agri', nome:'Agricoltura, silvicoltura e pesca',                                              of:2.8, pn:9.4, liq:92.1, cf:0.3, tt:5.6 },
+  { k:'manif',nome:'Estrazione · Manifattura · Produzione energia/gas',                              of:3.0, pn:7.6, liq:93.7, cf:0.5, tt:4.9 },
+  { k:'acqua',nome:'Fornitura acqua · Reti fognarie · Rifiuti · Trasmissione energia/gas',           of:2.6, pn:6.7, liq:84.2, cf:1.9, tt:6.5 },
+  { k:'edil', nome:'Costruzione di edifici',                                                          of:3.8, pn:4.9, liq:108.0,cf:0.4, tt:3.8 },
+  { k:'ingciv',nome:'Ingegneria civile · Costruzioni specializzate',                                  of:2.8, pn:5.3, liq:101.1,cf:1.4, tt:5.3 },
+  { k:'ingr', nome:'Commercio ingrosso/dettaglio autoveicoli · Ingrosso · Distrib. energia/gas',      of:2.1, pn:6.3, liq:101.4,cf:0.6, tt:2.9 },
+  { k:'dett', nome:'Commercio al dettaglio · Bar e ristoranti',                                       of:1.5, pn:4.2, liq:89.8, cf:1.0, tt:7.8 },
+  { k:'trasp',nome:'Trasporti e magazzinaggio · Hotel',                                               of:1.5, pn:4.1, liq:86.0, cf:1.4, tt:10.2 },
+  { k:'srvimp',nome:'Servizi alle imprese',                                                           of:1.8, pn:5.2, liq:95.4, cf:1.7, tt:11.9 },
+  { k:'srvpers',nome:'Servizi alle persone',                                                          of:2.7, pn:2.3, liq:69.8, cf:0.5, tt:14.6 },
+];
 
-            document.getElementById('printableArea').classList.remove('hidden');
-            document.getElementById('emptyState').classList.add('hidden');
-            document.getElementById('btnExportHtml').disabled = false;
-            document.getElementById('btnExportPdf').disabled = false;
-        }
+/* ----------------------------------------------------------------------------
+   1) MAPPATURA TAG XBRL (tassonomia italiana itcc-ci)
+   Per ogni voce indichiamo una lista di possibili local-name: il parser
+   prova in ordine e usa il primo presente (gestione robusta delle varianti
+   di versione della tassonomia). Il prefisso namespace viene ignorato.
+---------------------------------------------------------------------------- */
+const TAGS = {
+  // --- STATO PATRIMONIALE · ATTIVO ---
+  totaleAttivo:        ['TotaleAttivo'],
+  creditiVersoSoci:    ['TotaleCreditiVersoSociPerVersamentiAncoraDovuti','CreditiVersoSociPerVersamentiAncoraDovuti'],
+  immobilizzazioni:    ['TotaleImmobilizzazioni'],
+  immobImmateriali:    ['TotaleImmobilizzazioniImmateriali'],
+  immobMateriali:      ['TotaleImmobilizzazioniMateriali'],
+  immobFinanziarie:    ['TotaleImmobilizzazioniFinanziarie'],
+  attivoCircolante:    ['TotaleAttivoCircolante'],
+  rimanenze:           ['TotaleRimanenze','Rimanenze'],
+  creditiAC:           ['TotaleCrediti'],                       // C.II — crediti dell'attivo circolante
+  attFinNonImmob:      ['TotaleAttivitaFinanziarieCheNonCostituisconoImmobilizzazioni'],
+  liquidita:           ['TotaleDisponibilitaLiquide','DisponibilitaLiquide'],
+  rateiAttivi:         ['TotaleRateiRiscontiAttivi','RateiRiscontiAttivi','TotaleRateiRiscontiAttiviAttivo'],
 
-        // Esportazione HTML pulito
-        document.getElementById('btnExportHtml').addEventListener('click', function() {
-            const tableHtml = document.getElementById('printableArea').innerHTML;
-            const fullHtmlPage = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Esportazione Bilancio</title>
-                    <style>
-                        body { font-family: sans-serif; padding: 30px; color: #333; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                        th, td { border-bottom: 1px solid #ddd; padding: 10px; text-align: left; }
-                        th { background-color: #f5f5f5; }
-                        .text-right { text-align: right; }
-                        .font-mono { font-family: monospace; color: #4338ca; }
-                    </style>
-                </head>
-                <body>
-                    ${tableHtml}
-                </body>
-                </html>
-            `;
+  // --- STATO PATRIMONIALE · PASSIVO ---
+  patrimonioNetto:     ['TotalePatrimonioNetto'],
+  capitaleSociale:     ['Capitale','CapitaleSociale'],
+  fondiRischi:         ['TotaleFondiPerRischiEdOneri','TotaleFondiRischiEdOneri','TotaleFondiPerRischiOneri'],
+  tfr:                 ['TrattamentoFineRapportoLavoroSubordinato','TfrLavoroSubordinato'],
+  debiti:              ['TotaleDebiti'],
+  debitiTributari:     ['TotaleDebitiTributari','DebitiTributari'],
+  rateiPassivi:        ['TotaleRateiRiscontiPassivi','RateiRiscontiPassivi','TotaleRateiRiscontiPassiviPassivo'],
+  totalePassivo:       ['TotalePassivo'],
 
-            const blob = new Blob([fullHtmlPage], { type: 'text/html' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'bilancio_convertito.html';
-            link.click();
-        });
+  // --- CONTO ECONOMICO ---
+  valoreProduzione:    ['TotaleValoreProduzione'],
+  ricavi:              ['RicaviVenditePrestazioni','RicaviDelleVenditeEPrestazioni'],
+  costiProduzione:     ['TotaleCostiProduzione'],
+  redditoOperativo:    ['DifferenzaValoreCostiProduzione'],     // A - B (EBIT da gestione caratteristica)
+  ammortamenti:        ['TotaleAmmortamentiSvalutazioni'],
+  costoPersonale:      ['TotaleCostiPerIlPersonale','CostiPerIlPersonale'],
+  proventiOneriFin:    ['TotaleProventiOneriFinanziari'],
+  oneriFinanziari:     ['TotaleInteressiAltriOneriFinanziari','InteressiEdAltriOneriFinanziari','TotaleInteressiEAltriOneriFinanziari'],
+  proventiFinanziari:  ['TotaleAltriProventiFinanziari'],
+  risultatoAnteImposte:['RisultatoPrimaImposte','RisultatoPrimaDelleImposte'],
+  imposte:             ['TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate','ImposteRedditoEsercizio','TotaleImposteSulRedditoEsercizio'],
+  utileEsercizio:      ['UtilePerditaEsercizio','UtilePerditaDellEsercizio'],
+};
 
-        // Esportazione PDF nativa (sfrutta la finestra di stampa ottimizzata CSS)
-        document.getElementById('btnExportPdf').addEventListener('click', function() {
-            window.print();
-        });
-    </script>
+/* ----------------------------------------------------------------------------
+   2) PARSING XBRL (DOMParser)
+---------------------------------------------------------------------------- */
+
+// Converte il testo di un fatto XBRL in numero. Gestisce attributo sign="-".
+function factToNumber(el){
+  if(!el) return null;
+  let raw = (el.textContent || '').trim();
+  if(raw === '') return null;
+  raw = raw.replace(/\s+/g,'').replace(/,/g,'');     // i valori XBRL usano il punto decimale
+  let v = parseFloat(raw);
+  if(!isFinite(v)) return null;
+  const sign = el.getAttribute('sign');               // alcuni emittenti indicano il segno separatamente
+  if(sign === '-') v = -Math.abs(v);
+  return v;
+}
+
+// localName senza prefisso namespace, robusto anche se el.localName non è valorizzato
+function localName(el){
+  if(el.localName) return el.localName;
+  const t = el.tagName || '';
+  return t.indexOf(':') >= 0 ? t.split(':').pop() : t;
+}
+
+// Un contesto ha dimensioni se contiene explicit/typedMember (xbrldi)
+function contextHasDimensions(ctx){
+  return !!ctx.getElementsByTagName('*') &&
+         Array.from(ctx.getElementsByTagName('*')).some(n=>{
+           const ln = localName(n);
+           return ln === 'explicitMember' || ln === 'typedMember';
+         });
+}
+
+// Estrae la data di riferimento (fine periodo) di un contesto: instant oppure endDate.
+function contextDate(ctx){
+  const kids = Array.from(ctx.getElementsByTagName('*'));
+  let instant=null, end=null;
+  for(const n of kids){
+    const ln = localName(n);
+    if(ln === 'instant')  instant = n.textContent.trim();
+    if(ln === 'endDate')  end     = n.textContent.trim();
+  }
+  return instant || end || null;
+}
+
+/*
+  parseXBRL: riceve la stringa XML e restituisce
+  { ok, error, meta:{name, dates:[curr,prev]}, current:{...voci}, prior:{...voci}, rawCounts }
+*/
+function parseXBRL(xmlString){
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlString, 'application/xml');
+  const perr = doc.getElementsByTagName('parsererror');
+  if(perr && perr.length){
+    return { ok:false, error:'XML non valido o corrotto: impossibile effettuare il parsing.' };
+  }
+
+  const all = Array.from(doc.getElementsByTagName('*'));
+
+  // 2a) Mappa contesti -> { date, hasDim }
+  const ctxInfo = {};   // id -> {date, hasDim}
+  for(const el of all){
+    if(localName(el) === 'context'){
+      const id = el.getAttribute('id');
+      if(id) ctxInfo[id] = { date: contextDate(el), hasDim: contextHasDimensions(el) };
+    }
+  }
+
+  // 2b) Indice dei fatti numerici: localName -> [{date,hasDim,value}]
+  //     + lista piatta per le somme per suffisso (debiti entro/oltre, ecc.)
+  const factIndex = {};
+  const flatFacts = [];
+  const dateTally = {};   // conteggio fatti per data (per individuare gli esercizi)
+  for(const el of all){
+    const ref = el.getAttribute('contextRef');
+    if(!ref || !(ref in ctxInfo)) continue;
+    const v = factToNumber(el);
+    if(v === null) continue;
+    const ln = localName(el);
+    const info = ctxInfo[ref];
+    const rec = { date: info.date, hasDim: info.hasDim, value: v };
+    (factIndex[ln] = factIndex[ln] || []).push(rec);
+    flatFacts.push({ name: ln, date: info.date, hasDim: info.hasDim, value: v });
+    if(info.date && !info.hasDim) dateTally[info.date] = (dateTally[info.date]||0)+1;
+  }
+
+  // 2c) Determina gli esercizi t e t-1: le due date con più fatti "senza dimensioni"
+  const dates = Object.keys(dateTally).sort((a,b)=> b.localeCompare(a)); // più recente prima
+  if(dates.length === 0){
+    return { ok:false, error:'Nessun dato di bilancio riconosciuto. Verifica che il file sia in formato XBRL itcc-ci.' };
+  }
+  const dCurr = dates[0];
+  const dPrev = dates.length > 1 ? dates[1] : null;
+
+  // Helper: valore di una voce (lista candidati) per una certa data.
+  // Preferisce contesti SENZA dimensioni (dato di bilancio "puro").
+  function getVal(candidates, date){
+    if(!date) return null;
+    for(const name of candidates){
+      const arr = factIndex[name];
+      if(!arr) continue;
+      const sameDate = arr.filter(r=>r.date === date);
+      if(!sameDate.length) continue;
+      const noDim = sameDate.find(r=>!r.hasDim);
+      return (noDim || sameDate[0]).value;
+    }
+    return null;
+  }
+
+  // Helper: somma tutti i fatti il cui localName termina con un suffisso,
+  // per una certa data, escludendo eventuali sottototali ("Totale...").
+  function sumBySuffix(suffix, date, filterFn){
+    let s = 0, found = false;
+    for(const f of flatFacts){
+      if(f.date !== date || f.hasDim) continue;
+      if(!f.name.endsWith(suffix)) continue;
+      if(f.name.startsWith('Totale')) continue;          // evita doppi conteggi sui subtotali
+      if(filterFn && !filterFn(f.name)) continue;
+      s += f.value; found = true;
+    }
+    return found ? s : null;
+  }
+
+  // 2d) Costruzione oggetto voci per un esercizio
+  function buildYear(date){
+    if(!date) return null;
+    const Y = {};
+    for(const key in TAGS) Y[key] = getVal(TAGS[key], date);
+
+    // --- Fallback aggraziati su voci mancanti ---
+    // Ammortamenti: se manca il totale, somma le componenti note
+    if(Y.ammortamenti === null){
+      const amm = sumBySuffix('', date, n=> /^Ammortamento/.test(n) || /Svalutazione/.test(n));
+      Y.ammortamenti = (amm !== null) ? Math.abs(amm) : 0;
+    }
+    // Reddito operativo: se manca, A - B
+    if(Y.redditoOperativo === null && Y.valoreProduzione !== null && Y.costiProduzione !== null){
+      Y.redditoOperativo = Y.valoreProduzione - Y.costiProduzione;
+    }
+    // Ricavi: fallback sul valore della produzione
+    if(Y.ricavi === null) Y.ricavi = Y.valoreProduzione;
+    // Oneri finanziari: assicura valore positivo (costo)
+    if(Y.oneriFinanziari !== null) Y.oneriFinanziari = Math.abs(Y.oneriFinanziari);
+
+    // Debiti a breve / oltre: somma per suffisso sulle singole voci di debito
+    const breve = sumBySuffix('EsigibiliEntroEsercizioSuccessivo', date);
+    const oltre = sumBySuffix('EsigibiliOltreEsercizioSuccessivo', date);
+    Y.debitiBreve = breve;
+    Y.debitiOltre = oltre;
+    if(Y.debitiBreve === null && Y.debiti !== null){
+      // Forma abbreviata senza dettaglio scadenze: assunzione prudenziale (tutti a breve)
+      Y.debitiBreve = Y.debiti; Y.debitiOltre = 0; Y.debitiSplitStimato = true;
+    } else {
+      Y.debitiSplitStimato = false;
+    }
+
+    // Debiti finanziari a breve (verso banche / altri finanziatori / obbligazioni) — per DSCR
+    Y.debitiFinBreve = sumBySuffix('EsigibiliEntroEsercizioSuccessivo', date,
+      n => /Banche|AltriFinanziatori|Obbligazioni|SociFinanziamenti/.test(n)) || 0;
+
+    // Debiti previdenziali (per indice CCII 5)
+    Y.debitiPrevidenziali = sumBySuffix('', date,
+      n => /IstitutiDiPrevidenza|IstitutiPrevidenza|PrevidenzaSicurezzaSociale/.test(n) && !n.startsWith('Totale')) || 0;
+    if(Y.debitiTributari === null) Y.debitiTributari = 0;
+
+    // Totale attivo: fallback su componenti
+    if(Y.totaleAttivo === null){
+      const parts = [Y.creditiVersoSoci, Y.immobilizzazioni, Y.attivoCircolante, Y.rateiAttivi]
+        .map(x=>x||0);
+      const sum = parts.reduce((a,b)=>a+b,0);
+      Y.totaleAttivo = sum || null;
+    }
+    return Y;
+  }
+
+  const current = buildYear(dCurr);
+  const prior   = buildYear(dPrev);
+
+  // 2e) Denominazione società (best effort): cerca tag tipico, altrimenti vuoto
+  let name = '';
+  for(const cand of ['DenominazioneSocieta','DatiAnagraficiDenominazione','Denominazione']){
+    const arr = doc.getElementsByTagName('*');
+    const el = Array.from(arr).find(e=>localName(e)===cand);
+    if(el && el.textContent.trim()){ name = el.textContent.trim(); break; }
+  }
+
+  return {
+    ok:true,
+    meta:{ name, dateCurr:dCurr, datePrev:dPrev,
+           yearCurr:(dCurr||'').slice(0,4), yearPrev:(dPrev||'').slice(0,4) },
+    current, prior
+  };
+}
+
+/* ----------------------------------------------------------------------------
+   3) UTILITY DI CALCOLO E FORMATTAZIONE
+---------------------------------------------------------------------------- */
+const fmtEUR = n => (n===null||n===undefined||!isFinite(n)) ? '—'
+  : new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n);
+const fmtNum = (n,d=0) => (n===null||n===undefined||!isFinite(n)) ? '—'
+  : new Intl.NumberFormat('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}).format(n);
+const fmtPct = (n,d=1) => (n===null||n===undefined||!isFinite(n)) ? '—'
+  : new Intl.NumberFormat('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}).format(n)+'%';
+const safeDiv = (a,b)=> (b && isFinite(a/b)) ? a/b : null;
+
+// Stato -> classi colore
+const STATUS = {
+  ok:   { lab:'BUONO',   cls:'text-ok bg-ok/10 border-ok/30',     dot:'bg-ok' },
+  warn: { lab:'ATTENZIONE', cls:'text-warn bg-warn/10 border-warn/30', dot:'bg-warn' },
+  bad:  { lab:'CRITICO', cls:'text-bad bg-bad/10 border-bad/30',   dot:'bg-bad' },
+  na:   { lab:'N/D',     cls:'text-ink-400 bg-white/5 border-white/10', dot:'bg-ink-400' },
+};
+// dir='hi' -> più alto è meglio ; dir='lo' -> più basso è meglio
+function statusByThresh(val, good, mid, dir='hi'){
+  if(val===null||val===undefined||!isFinite(val)) return 'na';
+  if(dir==='hi') return val>=good?'ok':(val>=mid?'warn':'bad');
+  return val<=good?'ok':(val<=mid?'warn':'bad');
+}
+
+/* ----------------------------------------------------------------------------
+   4) MODELLO COMPLETO — da dati parsati + parametri forecast a tutti i risultati
+---------------------------------------------------------------------------- */
+function computeModel(parsed, params){
+  const c = parsed.current, p = parsed.prior || {};
+  const M = { meta:parsed.meta, c, p };
+
+  /* --- 4.1 RICLASSIFICAZIONE STATO PATRIMONIALE (criterio finanziario) --- */
+  const immob   = c.immobilizzazioni || 0;
+  const liqImm  = c.liquidita || 0;                                   // liquidità immediate
+  const liqDiff = (c.creditiAC||0) + (c.attFinNonImmob||0) + (c.rateiAttivi||0); // liquidità differite
+  const rim     = c.rimanenze || 0;
+  const attivoBreve = rim + liqDiff + liqImm;
+  const capInvestito = (c.totaleAttivo!==null) ? c.totaleAttivo : (immob + attivoBreve);
+  const PN      = c.patrimonioNetto || 0;
+  const passConsol = (c.debitiOltre||0) + (c.tfr||0) + (c.fondiRischi||0);
+  const passBreve  = (c.debitiBreve||0) + (c.rateiPassivi||0);
+  const capPermanente = PN + passConsol;
+  const debitiTot  = (c.debiti!==null) ? c.debiti : ((c.debitiBreve||0)+(c.debitiOltre||0));
+  const mezziTerzi = debitiTot + (c.fondiRischi||0) + (c.tfr||0) + (c.rateiPassivi||0);
+
+  M.riclass = { immob, liqImm, liqDiff, rim, attivoBreve, capInvestito, PN, passConsol,
+                passBreve, capPermanente, debitiTot, mezziTerzi };
+
+  /* --- 4.2 INDICI ECONOMICO-FINANZIARI --- */
+  const ebit = (c.redditoOperativo!==null) ? c.redditoOperativo
+             : ((c.valoreProduzione||0)-(c.costiProduzione||0));
+  const ricavi = c.ricavi || 0;
+  const utile  = c.utileEsercizio || 0;
+
+  const ROE = safeDiv(utile, PN)!==null ? safeDiv(utile,PN)*100 : null;
+  const ROI = safeDiv(ebit, capInvestito)!==null ? safeDiv(ebit,capInvestito)*100 : null;
+  const ROS = safeDiv(ebit, ricavi)!==null ? safeDiv(ebit,ricavi)*100 : null;
+  const currentRatio = safeDiv(attivoBreve, passBreve);
+  const quickRatio   = safeDiv(attivoBreve - rim, passBreve);
+  const leverage     = safeDiv(capInvestito, PN);          // Capitale investito / Mezzi propri
+  const coperturaImm = safeDiv(capPermanente, immob);      // Capitali permanenti / Immobilizzazioni
+
+  // ROE/ROI esercizio precedente (per il trend)
+  const ebitPrev = (p.redditoOperativo!==null && p.redditoOperativo!==undefined) ? p.redditoOperativo
+                 : ((p.valoreProduzione||0)-(p.costiProduzione||0));
+  const ROIprev = safeDiv(ebitPrev, (p.totaleAttivo||0))!==null ? safeDiv(ebitPrev,(p.totaleAttivo||0))*100 : null;
+  const ROEprev = safeDiv((p.utileEsercizio||0),(p.patrimonioNetto||0))!==null ? safeDiv((p.utileEsercizio||0),(p.patrimonioNetto||0))*100 : null;
+
+  M.indici = {
+    ROE:{ v:ROE, prev:ROEprev, formula:'Utile d’esercizio / Patrimonio netto',
+          status:statusByThresh(ROE,8,0,'hi') },
+    ROI:{ v:ROI, prev:ROIprev, formula:'Reddito operativo (EBIT) / Capitale investito',
+          status:statusByThresh(ROI,6,2,'hi') },
+    ROS:{ v:ROS, formula:'Reddito operativo (EBIT) / Ricavi delle vendite',
+          status:statusByThresh(ROS,6,0,'hi') },
+    currentRatio:{ v:currentRatio, formula:'Attività correnti / Passività correnti',
+          status:statusByThresh(currentRatio,1.5,1,'hi') },
+    quickRatio:{ v:quickRatio, formula:'(Att. correnti − Rimanenze) / Passività correnti',
+          status:statusByThresh(quickRatio,1,0.7,'hi') },
+    leverage:{ v:leverage, formula:'Capitale investito / Patrimonio netto',
+          status: (PN<=0)?'bad':statusByThresh(leverage,2,4,'lo') },
+    coperturaImm:{ v:coperturaImm, formula:'(PN + Passività consolidate) / Immobilizzazioni',
+          status:statusByThresh(coperturaImm,1,0.8,'hi') },
+    ebit, ricavi, utile
+  };
+
+  /* --- 4.3 RENDICONTO FINANZIARIO (metodo indiretto, semplificato) --- */
+  const dRim   = (c.rimanenze||0) - (p.rimanenze||0);
+  const dCred  = (c.creditiAC||0) - (p.creditiAC||0);
+  const dDeb   = (c.debiti||0)    - (p.debiti||0);
+  const dTfr   = (c.tfr||0)       - (p.tfr||0);
+  const dFondi = (c.fondiRischi||0) - (p.fondiRischi||0);
+  const amm    = c.ammortamenti || 0;
+
+  const flussoReddituale = utile + amm + dTfr + dFondi;          // autofinanziamento
+  const variazioneCCN    = (-dRim) + (-dCred) + (dDeb);          // assorbimento/liberazione CCN
+  const flussoOperativo  = flussoReddituale + variazioneCCN;     // flusso della gestione corrente
+  const dLiquidita       = (c.liquidita||0) - (p.liquidita||0);
+  const residuo          = dLiquidita - flussoOperativo;         // investimenti/finanziamenti (residuale)
+
+  M.rendiconto = {
+    utile, amm, dTfr, dFondi, dRim, dCred, dDeb,
+    flussoReddituale, variazioneCCN, flussoOperativo, dLiquidita, residuo,
+    hasPrior: !!parsed.prior
+  };
+
+  /* --- 4.5 FORECAST 12 MESI (necessario anche per DSCR) --- */
+  M.forecast = buildForecast(c, params);
+
+  /* --- 4.4 INDICATORI CCII --- */
+  const settore = SETTORI_CCII.find(s=>s.k===params.sector) || SETTORI_CCII[0];
+  const attivo  = c.totaleAttivo || capInvestito || 0;
+  const cashFlowCCII = utile + amm;                  // proxy "cash flow" CNDCEC (utile + ammortamenti)
+
+  const i_of  = safeDiv((c.oneriFinanziari||0), ricavi)!==null ? safeDiv((c.oneriFinanziari||0),ricavi)*100 : null;
+  const i_pn  = safeDiv(PN, debitiTot)!==null ? safeDiv(PN,debitiTot)*100 : null;
+  const i_liq = safeDiv(attivoBreve, passBreve)!==null ? safeDiv(attivoBreve,passBreve)*100 : null;
+  const i_cf  = safeDiv(cashFlowCCII, attivo)!==null ? safeDiv(cashFlowCCII,attivo)*100 : null;
+  const i_tt  = safeDiv((c.debitiTributari||0)+(c.debitiPrevidenziali||0), attivo)!==null
+                ? safeDiv((c.debitiTributari||0)+(c.debitiPrevidenziali||0),attivo)*100 : null;
+
+  const alertOF  = (i_of !==null) && (i_of  >= settore.of);
+  const alertPN  = (i_pn !==null) && (i_pn  <= settore.pn);
+  const alertLIQ = (i_liq!==null) && (i_liq <= settore.liq);
+  const alertCF  = (i_cf !==null) && (i_cf  <= settore.cf);
+  const alertTT  = (i_tt !==null) && (i_tt  >= settore.tt);
+  const allFive  = alertOF && alertPN && alertLIQ && alertCF && alertTT;
+
+  // DSCR stimato (semplificato) dal forecast: cassa disponibile / servizio del debito
+  const operatingCF12 = M.forecast.operatingCF12;
+  const debtService = (c.debitiFinBreve||0) + (c.oneriFinanziari||0);
+  const dscr = (debtService>0) ? ((c.liquidita||0) + operatingCF12) / debtService : null;
+
+  // Gerarchia CNDCEC
+  let crisiVerdetto, crisiLivello;
+  if(PN <= 0){
+    crisiVerdetto = 'Patrimonio netto ≤ 0: situazione di crisi presunta (constatazione).';
+    crisiLivello  = 'bad';
+  } else if(dscr!==null && dscr < 1){
+    crisiVerdetto = 'DSCR stimato < 1: segnale di allerta sulla sostenibilità del debito.';
+    crisiLivello  = 'bad';
+  } else if(dscr!==null && dscr >= 1){
+    crisiVerdetto = 'DSCR stimato ≥ 1: nessuna presunzione di crisi dalla gerarchia primaria.';
+    crisiLivello  = 'ok';
+  } else if(allFive){
+    crisiVerdetto = 'DSCR non disponibile e superamento congiunto di TUTTE e 5 le soglie settoriali: ragionevole presunzione di crisi.';
+    crisiLivello  = 'bad';
+  } else {
+    const nAlert = [alertOF,alertPN,alertLIQ,alertCF,alertTT].filter(Boolean).length;
+    crisiVerdetto = `DSCR non disponibile; ${nAlert}/5 indici settoriali in allerta (la presunzione di crisi richiede tutti e 5).`;
+    crisiLivello  = nAlert>=3 ? 'warn' : (nAlert>0?'warn':'ok');
+  }
+
+  M.ccii = {
+    settore, attivo, cashFlowCCII, dscr, debtService, PN,
+    indici:[
+      { lab:'Sostenibilità oneri finanziari', sub:'Oneri finanziari / Ricavi', v:i_of, soglia:settore.of, dir:'≥', alert:alertOF, unit:'%' },
+      { lab:'Adeguatezza patrimoniale',       sub:'Patrimonio netto / Debiti totali', v:i_pn, soglia:settore.pn, dir:'≤', alert:alertPN, unit:'%' },
+      { lab:'Liquidità',                      sub:'Attività a breve / Passività a breve', v:i_liq, soglia:settore.liq, dir:'≤', alert:alertLIQ, unit:'%' },
+      { lab:'Ritorno liquido dell’attivo',    sub:'Cash flow / Attivo', v:i_cf, soglia:settore.cf, dir:'≤', alert:alertCF, unit:'%' },
+      { lab:'Indebitam. previd. e tributario',sub:'(Deb. previd.+tributari) / Attivo', v:i_tt, soglia:settore.tt, dir:'≥', alert:alertTT, unit:'%' },
+    ],
+    allFive, crisiVerdetto, crisiLivello
+  };
+
+  /* --- 4.6 RELAZIONE FINALE --- */
+  M.report = buildReport(M);
+  return M;
+}
+
+/* ----------------------------------------------------------------------------
+   4.5b FORECAST — modello mensile a 12 mesi con sfasamento incassi/pagamenti
+---------------------------------------------------------------------------- */
+function buildForecast(c, params){
+  const g   = (params.growth||0)/100;   // crescita ricavi annua
+  const kc  = (params.cost||0)/100;     // variazione costi annua
+  const dso = Math.max(0, params.dso||0);   // giorni medi di incasso clienti
+  const dpo = Math.max(0, params.dpo||0);   // giorni medi di pagamento fornitori
+
+  const finMonthly = (c.oneriFinanziari||0)/12;       // oneri finanziari spalmati sui 12 mesi
+  const startCash  = c.liquidita || 0;                // cassa iniziale = liquidità immediata di bilancio
+
+  // Ricavi e costi MONETARI di competenza, mensilizzati con ramp lineare della variazione annua.
+  // (gli ammortamenti sono esclusi dai costi perché non generano uscite di cassa)
+  const baseRev  = (c.ricavi||0)/12;
+  const baseCost = ((c.costiProduzione||0) - (c.ammortamenti||0))/12;
+  const salesAccr=[], costAccr=[];
+  for(let m=1;m<=12;m++){
+    salesAccr.push( baseRev  * (1 + g  * (m/12)) );
+    costAccr.push(  baseCost * (1 + kc * (m/12)) );
+  }
+
+  // Capitale circolante di APERTURA (saldi del bilancio):
+  //  - crediti commerciali già maturati -> incassati nei primi mesi secondo il DSO
+  //  - debiti commerciali (fornitori) = debiti a breve al netto di quote finanziarie/erariali/previdenziali
+  const openRecv = Math.max(0, c.creditiAC || 0);
+  const openPay  = Math.max(0, (c.debitiBreve||0) - (c.debitiFinBreve||0)
+                               - (c.debitiTributari||0) - (c.debitiPrevidenziali||0));
+
+  const lagInc = dso/30, lagPay = dpo/30;   // sfasamento in MESI
+
+  // Rilascio dello stock di apertura: distribuito sui primi 'span' mesi (più lungo è il termine, più diluito)
+  function releaseOpening(stock, lagMonths){
+    const out = new Array(12).fill(0);
+    const span = Math.min(12, Math.max(1, Math.ceil(lagMonths || 1)));
+    for(let m=0;m<span;m++) out[m] = stock/span;
+    return out;
+  }
+  // Manifesto di cassa dei flussi di competenza: ciò che matura nel mese k viene incassato/pagato in k+lag.
+  // La quota che cadrebbe oltre il 12° mese resta come credito/debito di chiusura (non monetizzato nell'orizzonte).
+  function lagFlow(accr, lagMonths){
+    const out = new Array(12).fill(0);
+    const lo = Math.floor(lagMonths), frac = lagMonths - lo;
+    for(let k=1;k<=12;k++){
+      const v = accr[k-1];
+      const mLo = k+lo, mHi = k+lo+1;
+      if(mLo>=1 && mLo<=12) out[mLo-1] += v*(1-frac);
+      if(mHi>=1 && mHi<=12) out[mHi-1] += v*frac;
+    }
+    return out;
+  }
+
+  const incOpen = releaseOpening(openRecv, lagInc);
+  const incNew  = lagFlow(salesAccr, lagInc);
+  const payOpen = releaseOpening(openPay,  lagPay);
+  const payNew  = lagFlow(costAccr,  lagPay);
+
+  const labels=[], balance=[], netCF=[], incassi=[], pagamenti=[];
+  let cash = startCash; let opCF12 = 0;
+  const MESI = ['Mese 1','Mese 2','Mese 3','Mese 4','Mese 5','Mese 6','Mese 7','Mese 8','Mese 9','Mese 10','Mese 11','Mese 12'];
+  for(let m=1;m<=12;m++){
+    const inc = incOpen[m-1] + incNew[m-1];   // incassi del mese (stock di apertura + nuove vendite incassate)
+    const pay = payOpen[m-1] + payNew[m-1];    // pagamenti del mese (fornitori di apertura + nuovi costi)
+    const op  = inc - pay;                     // flusso di cassa operativo (ante oneri finanziari)
+    const net = op - finMonthly;               // flusso netto di periodo
+    opCF12 += op;
+    cash += net;
+    labels.push(MESI[m-1]); incassi.push(inc); pagamenti.push(pay);
+    netCF.push(net); balance.push(cash);
+  }
+  return { labels, balance, netCF, incassi, pagamenti, startCash,
+           endCash:cash, operatingCF12:opCF12, minCash:Math.min(...balance),
+           minMonth: balance.indexOf(Math.min(...balance))+1 };
+}
+
+/* ----------------------------------------------------------------------------
+   4.6b RELAZIONE — algoritmo di aggregazione in paragrafi
+---------------------------------------------------------------------------- */
+function buildReport(M){
+  const r=M.riclass, i=M.indici, cc=M.ccii, f=M.forecast, c=M.c;
+  const P=[];   // paragrafi {titolo, livello, testo[]}
+
+  // Situazione patrimoniale
+  const pat=[];
+  pat.push(`Il capitale investito ammonta a ${fmtEUR(r.capInvestito)}, finanziato per ${fmtEUR(r.PN)} da mezzi propri e per ${fmtEUR(r.mezziTerzi)} da mezzi di terzi.`);
+  if(r.PN<=0) pat.push('Il patrimonio netto risulta negativo o nullo: si tratta di una situazione di grave squilibrio patrimoniale che, ai sensi del CCII, configura una presunzione di crisi.');
+  else if(i.leverage.v!==null && i.leverage.v>4) pat.push(`La struttura finanziaria è fortemente dipendente dai terzi (leverage ${fmtNum(i.leverage.v,2)}): un’elevata leva amplifica il rischio finanziario.`);
+  else pat.push(`Il grado di indebitamento (leverage ${fmtNum(i.leverage.v,2)}) appare ${i.leverage.status==='ok'?'equilibrato':'sotto controllo ma da monitorare'}.`);
+  if(i.coperturaImm.v!==null){
+    pat.push(i.coperturaImm.v>=1
+      ? `Le immobilizzazioni sono integralmente coperte da capitali permanenti (indice ${fmtNum(i.coperturaImm.v,2)}): correlazione fonti/impieghi corretta.`
+      : `Le immobilizzazioni NON sono interamente coperte da capitali permanenti (indice ${fmtNum(i.coperturaImm.v,2)}): parte degli investimenti durevoli è finanziata con debito a breve, segnale di squilibrio strutturale.`);
+  }
+  P.push({ titolo:'Situazione patrimoniale', livello: r.PN<=0?'bad':(i.leverage.status), testo:pat });
+
+  // Equilibrio finanziario / liquidità
+  const fin=[];
+  fin.push(`Il current ratio è pari a ${fmtNum(i.currentRatio.v,2)} e il quick ratio a ${fmtNum(i.quickRatio.v,2)}.`);
+  const liqAlert = (i.quickRatio.v!==null && i.quickRatio.v<1);
+  const roiCalo  = (i.ROI.v!==null && i.ROI.prev!==null && i.ROI.v < i.ROI.prev);
+  if(liqAlert && roiCalo)
+    fin.push('⚠ ALERT LIQUIDITÀ: il quick ratio è inferiore a 1 e contemporaneamente il ROI è in calo rispetto all’esercizio precedente. La capacità di far fronte agli impegni a breve con le sole attività liquide è compromessa proprio mentre la redditività operativa si indebolisce: è prioritario un intervento sulla gestione del capitale circolante (incassi, scorte, dilazioni fornitori).');
+  else if(liqAlert)
+    fin.push('Il quick ratio inferiore a 1 indica che le attività liquide e differite non coprono integralmente le passività correnti: la tenuta della liquidità dipende dallo smobilizzo delle rimanenze.');
+  else
+    fin.push('L’equilibrio finanziario a breve appare presidiato: le attività correnti coprono le passività correnti.');
+  fin.push(`Il flusso di cassa della gestione corrente dell’esercizio è stimato in ${fmtEUR(M.rendiconto.flussoOperativo)}.`);
+  P.push({ titolo:'Equilibrio finanziario e liquidità', livello: liqAlert?(roiCalo?'bad':'warn'):'ok', testo:fin });
+
+  // Redditività
+  const red=[];
+  red.push(`ROE ${fmtPct(i.ROE.v)}, ROI ${fmtPct(i.ROI.v)}, ROS ${fmtPct(i.ROS.v)}.`);
+  if(i.ROI.v!==null){
+    red.push(i.ROI.v<0
+      ? 'La gestione caratteristica è in perdita (ROI negativo): l’attività operativa distrugge valore e va riportata in equilibrio.'
+      : (i.ROI.v<2
+        ? 'La redditività operativa è molto contenuta e potrebbe non coprire il costo del denaro: margine di sicurezza ridotto.'
+        : 'La redditività operativa è positiva e adeguata a remunerare il capitale investito.'));
+  }
+  if(i.ROE.v!==null && i.ROI.v!==null){
+    red.push(i.ROE.v>i.ROI.v
+      ? 'Il ROE supera il ROI: l’effetto leva finanziaria è favorevole (il debito “rende” più di quanto costa).'
+      : 'Il ROE non supera il ROI: la leva finanziaria non sta amplificando positivamente la redditività dei mezzi propri.');
+  }
+  P.push({ titolo:'Redditività', livello: i.ROI.status, testo:red });
+
+  // Rischio crisi
+  const cri=[];
+  cri.push(cc.crisiVerdetto);
+  cri.push(`Sintesi indici settoriali (${cc.settore.nome}): ${cc.indici.filter(x=>x.alert).length} alert su 5.`);
+  if(cc.dscr!==null) cri.push(`DSCR stimato dal forecast: ${fmtNum(cc.dscr,2)} (servizio del debito ${fmtEUR(cc.debtService)}).`);
+  else cri.push('DSCR non determinabile dai soli dati di bilancio statici: in tal caso il CCII rinvia alla verifica congiunta dei 5 indici settoriali.');
+  P.push({ titolo:'Rischio di crisi (CCII)', livello: cc.crisiLivello, testo:cri });
+
+  // Prospettiva di cassa
+  const cash=[];
+  cash.push(`Partendo da una liquidità iniziale di ${fmtEUR(f.startCash)}, il forecast a 12 mesi proietta un saldo finale di ${fmtEUR(f.endCash)}.`);
+  if(f.minCash<0) cash.push(`⚠ Il saldo di cassa diventa NEGATIVO (minimo ${fmtEUR(f.minCash)} al mese ${f.minMonth}): è probabile una tensione di tesoreria da coprire con linee di credito o interventi sul circolante.`);
+  else cash.push(`Il saldo di cassa resta positivo per l’intero orizzonte (minimo ${fmtEUR(f.minCash)} al mese ${f.minMonth}).`);
+  P.push({ titolo:'Prospettiva di cassa (12 mesi)', livello: f.minCash<0?'bad':(f.endCash<f.startCash?'warn':'ok'), testo:cash });
+
+  // Giudizio sintetico complessivo (calcolato sui 5 paragrafi precedenti)
+  const livelli = P.map(x=>x.livello);
+  const nBad = livelli.filter(l=>l==='bad').length;
+  const nWarn= livelli.filter(l=>l==='warn').length;
+  let overall, overallTxt;
+  if(nBad>=2 || (cc.crisiLivello==='bad' && r.PN<=0)){ overall='bad'; overallTxt='Stato di salute COMPROMESSO: presenza di criticità rilevanti e segnali di allerta sulla continuità. Si raccomandano interventi tempestivi e un monitoraggio ravvicinato ai sensi dell’art. 3 CCII.'; }
+  else if(nBad===1 || nWarn>=2){ overall='warn'; overallTxt='Stato di salute con CRITICITÀ DA PRESIDIARE: alcuni equilibri sono sotto pressione. Opportuno un piano di azione mirato sulle aree segnalate.'; }
+  else { overall='ok'; overallTxt='Stato di salute COMPLESSIVAMENTE EQUILIBRATO: gli indicatori principali risultano nella norma. Mantenere il monitoraggio periodico.'; }
+
+  // Il giudizio diventa il 6° paragrafo conclusivo della relazione
+  P.push({ titolo:'Giudizio complessivo', livello: overall, testo:[overallTxt] });
+
+  return { paragrafi:P, overall, overallTxt };
+}
+
+/* ============================================================================
+   5) STATO APPLICATIVO + RENDERING UI
+   ============================================================================ */
+let PARSED=null, MODEL=null, chart=null;
+
+function currentParams(){
+  return {
+    growth: +document.getElementById('pGrowth').value,
+    cost:   +document.getElementById('pCost').value,
+    dso:    +document.getElementById('pDSO').value,
+    dpo:    +document.getElementById('pDPO').value,
+    sector: document.getElementById('sectorSel').value,
+  };
+}
+
+function recompute(){
+  if(!PARSED) return;
+  MODEL = computeModel(PARSED, currentParams());
+  renderAll();
+}
+
+// Badge HTML
+function badge(status){
+  const s = STATUS[status]||STATUS.na;
+  return `<span class="badge inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${s.cls}">
+            <span class="w-1.5 h-1.5 rounded-full ${s.dot}"></span>${s.lab}</span>`;
+}
+
+/* ---- 5.1 DASHBOARD ---- */
+function renderDash(){
+  const M=MODEL, i=M.indici, r=M.riclass, c=M.c;
+  const kpi = (label,val,sub,status)=>`
+    <div class="card rounded-2xl p-4">
+      <div class="flex items-start justify-between">
+        <p class="text-[11px] uppercase tracking-wider text-ink-400">${label}</p>${badge(status)}
+      </div>
+      <p class="num text-2xl font-bold mt-2 ${status==='bad'?'text-bad':status==='warn'?'text-warn':status==='ok'?'text-ok':'text-ink-100'}">${val}</p>
+      <p class="text-[11px] text-ink-400 mt-1">${sub}</p>
+    </div>`;
+
+  const overall = M.report.overall;
+  const oCls = overall==='bad'?'from-bad/20 to-bad/5 border-bad/30':overall==='warn'?'from-warn/20 to-warn/5 border-warn/30':'from-ok/20 to-ok/5 border-ok/30';
+  const oTxt = overall==='bad'?'text-bad':overall==='warn'?'text-warn':'text-ok';
+
+  document.querySelector('[data-pane="dash"]').innerHTML = `
+    <div class="rounded-2xl p-5 bg-gradient-to-br ${oCls} border">
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 rounded-full ${STATUS[overall].dot} animate-pulse"></div>
+        <h3 class="font-display text-xl ${oTxt}">Semaforo di sintesi</h3>
+      </div>
+      <p class="text-sm text-ink-200 mt-2">${M.report.overallTxt}</p>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      ${kpi('Ricavi', fmtEUR(i.ricavi), `Esercizio ${M.meta.yearCurr}`, 'na')}
+      ${kpi('EBIT (Reddito operativo)', fmtEUR(i.ebit), 'Gestione caratteristica', i.ebit>=0?'ok':'bad')}
+      ${kpi('Utile d’esercizio', fmtEUR(i.utile), 'Risultato netto', i.utile>=0?'ok':'bad')}
+      ${kpi('Patrimonio netto', fmtEUR(r.PN), 'Mezzi propri', r.PN>0?'ok':'bad')}
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      ${kpi('ROE', fmtPct(i.ROE.v), 'Redditività mezzi propri', i.ROE.status)}
+      ${kpi('ROI', fmtPct(i.ROI.v), 'Redditività capitale investito', i.ROI.status)}
+      ${kpi('Current Ratio', fmtNum(i.currentRatio.v,2), 'Liquidità corrente', i.currentRatio.status)}
+      ${kpi('Quick Ratio', fmtNum(i.quickRatio.v,2), 'Liquidità immediata', i.quickRatio.status)}
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      ${kpi('DSCR (stima)', M.ccii.dscr!==null?fmtNum(M.ccii.dscr,2):'N/D', 'Sostenibilità debito 12m', M.ccii.dscr===null?'na':(M.ccii.dscr>=1?'ok':'bad'))}
+      ${kpi('Alert CCII', `${M.ccii.indici.filter(x=>x.alert).length} / 5`, M.ccii.settore.nome, M.ccii.crisiLivello)}
+      ${kpi('Cassa a 12 mesi', fmtEUR(M.forecast.endCash), `Min ${fmtEUR(M.forecast.minCash)} (mese ${M.forecast.minMonth})`, M.forecast.minCash<0?'bad':(M.forecast.endCash>=M.forecast.startCash?'ok':'warn'))}
+    </div>`;
+}
+
+/* ---- 5.2 INDICI ---- */
+function indexCard(title, o, fmt, extra=''){
+  const trend = (o.prev!==undefined && o.prev!==null && o.v!==null)
+    ? `<span class="num text-[11px] ${o.v>=o.prev?'text-ok':'text-bad'}">${o.v>=o.prev?'▲':'▼'} prec. ${fmt(o.prev)}</span>` : '';
+  return `
+    <div class="card rounded-2xl p-4">
+      <div class="flex items-start justify-between mb-1">
+        <h4 class="font-semibold text-ink-100">${title}</h4>${badge(o.status)}
+      </div>
+      <p class="num text-3xl font-bold ${o.status==='bad'?'text-bad':o.status==='warn'?'text-warn':'text-ok'}">${fmt(o.v)}</p>
+      <div class="flex items-center justify-between mt-1">
+        <p class="text-[11px] text-ink-400 font-mono">${o.formula}</p>${trend}
+      </div>
+      <p class="text-[12px] text-ink-300 mt-2 leading-snug">${commentoIndice(title,o)}</p>
+      ${extra}
+    </div>`;
+}
+// Commenti dinamici per indice
+function commentoIndice(title,o){
+  const v=o.v; if(v===null) return 'Dato non disponibile dal bilancio importato.';
+  switch(title){
+    case 'ROE': return v<0?'Redditività dei mezzi propri negativa: i soci stanno subendo un’erosione del capitale.':v<8?'Rendimento del capitale proprio modesto, inferiore alle attese tipiche di un investimento di rischio.':'Buon rendimento del capitale proprio.';
+    case 'ROI': return v<0?'Gestione caratteristica in perdita: l’attività operativa non genera reddito.':v<2?'Redditività operativa minima: rischio che non copra il costo dell’indebitamento.':v<6?'Redditività operativa discreta.':'Redditività operativa solida.';
+    case 'ROS': return v<0?'Margine operativo negativo sulle vendite: i ricavi non coprono i costi caratteristici.':v<5?'Marginalità sulle vendite contenuta.':'Buona marginalità operativa sulle vendite.';
+    case 'Current Ratio': return v<1?'Attività correnti inferiori alle passività correnti: squilibrio finanziario a breve.':v<1.5?'Equilibrio a breve presente ma con margine ridotto.':'Solida copertura delle passività correnti.';
+    case 'Quick Ratio': return v<0.7?'Forte dipendenza dallo smobilizzo del magazzino per onorare i debiti a breve.':v<1?'Le sole attività liquide non coprono del tutto i debiti a breve.':'Le attività liquide coprono i debiti a breve senza ricorso al magazzino.';
+    case 'Leverage (Indebitamento)': return v<=0?'Patrimonio netto negativo: leva non significativa, situazione critica.':v<2?'Struttura finanziaria solida e poco dipendente dai terzi.':v<4?'Indebitamento nella norma, da monitorare.':'Elevata dipendenza dai terzi: rischio finanziario amplificato.';
+    case 'Copertura immobilizzazioni': return v<0.8?'Investimenti durevoli finanziati in misura rilevante con debito a breve: squilibrio strutturale.':v<1?'Copertura quasi completa delle immobilizzazioni con capitali permanenti.':'Immobilizzazioni interamente coperte da fonti durevoli.';
+    default: return '';
+  }
+}
+function renderIndici(){
+  const M=MODEL, i=M.indici, r=M.riclass, c=M.c, p=M.p;
+  const row=(label,vc,vp)=>`<tr class="border-b border-white/5">
+      <td class="py-1.5 text-ink-300">${label}</td>
+      <td class="py-1.5 text-right num text-ink-100">${fmtEUR(vc)}</td>
+      <td class="py-1.5 text-right num text-ink-400">${fmtEUR(vp)}</td></tr>`;
+  const recl = `
+    <div class="card rounded-2xl p-5">
+      <h3 class="font-display text-lg mb-3">Stato Patrimoniale riclassificato <span class="text-ink-400 text-sm">(criterio finanziario)</span></h3>
+      <table class="w-full text-[13px]">
+        <thead><tr class="text-[11px] uppercase tracking-wider text-ink-400">
+          <th class="text-left font-medium pb-2">Voce</th>
+          <th class="text-right font-medium pb-2">${M.meta.yearCurr||'t'}</th>
+          <th class="text-right font-medium pb-2">${M.meta.yearPrev||'t-1'}</th></tr></thead>
+        <tbody>
+          ${row('Immobilizzazioni (attivo fisso)', r.immob, p.immobilizzazioni)}
+          ${row('Rimanenze', r.rim, p.rimanenze)}
+          ${row('Liquidità differite (crediti + att. fin. + ratei)', r.liqDiff, (p.creditiAC||0)+(p.attFinNonImmob||0)+(p.rateiAttivi||0))}
+          ${row('Liquidità immediate', r.liqImm, p.liquidita)}
+          ${row('› Capitale investito', r.capInvestito, p.totaleAttivo)}
+          ${row('Patrimonio netto (mezzi propri)', r.PN, p.patrimonioNetto)}
+          ${row('Passività consolidate (deb. oltre + TFR + fondi)', r.passConsol, (p.debitiOltre||0)+(p.tfr||0)+(p.fondiRischi||0))}
+          ${row('Passività correnti (deb. breve + ratei pass.)', r.passBreve, (p.debitiBreve||0)+(p.rateiPassivi||0))}
+        </tbody>
+      </table>
+      ${c.debitiSplitStimato?`<p class="text-[11px] text-warn mt-3">⚠ Il dettaglio scadenze dei debiti non è presente (bilancio abbreviato): la quota a breve è stata stimata pari al totale debiti.</p>`:''}
+    </div>`;
+
+  document.querySelector('[data-pane="indici"]').innerHTML = `
+    ${recl}
+    <h3 class="font-display text-lg mt-2">Indici economico-finanziari</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      ${indexCard('ROE', i.ROE, v=>fmtPct(v))}
+      ${indexCard('ROI', i.ROI, v=>fmtPct(v))}
+      ${indexCard('ROS', i.ROS, v=>fmtPct(v))}
+      ${indexCard('Current Ratio', i.currentRatio, v=>fmtNum(v,2))}
+      ${indexCard('Quick Ratio', i.quickRatio, v=>fmtNum(v,2))}
+      ${indexCard('Leverage (Indebitamento)', i.leverage, v=>fmtNum(v,2))}
+      ${indexCard('Copertura immobilizzazioni', i.coperturaImm, v=>fmtNum(v,2))}
+    </div>`;
+}
+
+/* ---- 5.3 RENDICONTO FINANZIARIO ---- */
+function renderRendiconto(){
+  const R=MODEL.rendiconto;
+  const line=(label,val,note='')=>`<div class="flex items-center justify-between py-2 border-b border-white/5">
+      <span class="text-ink-300 text-[13px]">${label}${note?`<span class="text-ink-400 text-[11px]"> ${note}</span>`:''}</span>
+      <span class="num text-[14px] ${val<0?'text-bad':'text-ink-100'}">${fmtEUR(val)}</span></div>`;
+  const sub=(label,val)=>`<div class="flex items-center justify-between py-2.5 border-b border-white/10 bg-white/[.03] px-2 rounded">
+      <span class="font-semibold text-ink-100 text-[13px]">${label}</span>
+      <span class="num font-bold text-[15px] ${val<0?'text-bad':'text-ok'}">${fmtEUR(val)}</span></div>`;
+
+  const warn = !R.hasPrior ? `<p class="text-[12px] text-warn mb-3">⚠ Manca l’esercizio precedente (t-1): le variazioni del capitale circolante non sono calcolabili e il rendiconto è limitato all’autofinanziamento.</p>`:'';
+
+  document.querySelector('[data-pane="rendi"]').innerHTML = `
+    <div class="card rounded-2xl p-5">
+      <h3 class="font-display text-lg mb-1">Rendiconto Finanziario <span class="text-ink-400 text-sm">— metodo indiretto (semplificato)</span></h3>
+      <p class="text-[12px] text-ink-400 mb-4">Ricostruito dall’utile d’esercizio rettificato per componenti non monetarie e variazioni del CCN (confronto t vs t-1).</p>
+      ${warn}
+      <div class="space-y-0.5">
+        ${line('Utile (perdita) d’esercizio', R.utile)}
+        ${line('+ Ammortamenti e svalutazioni', R.amm, '(non monetari)')}
+        ${line('+/- Variazione TFR', R.dTfr)}
+        ${line('+/- Variazione Fondi rischi e oneri', R.dFondi)}
+        ${sub('= Autofinanziamento (flusso reddituale)', R.flussoReddituale)}
+        ${line('- Variazione Rimanenze', -R.dRim, `(Δ ${fmtEUR(R.dRim)})`)}
+        ${line('- Variazione Crediti', -R.dCred, `(Δ ${fmtEUR(R.dCred)})`)}
+        ${line('+ Variazione Debiti', R.dDeb, `(Δ ${fmtEUR(R.dDeb)})`)}
+        ${sub('= Variazione del Capitale Circolante Netto', R.variazioneCCN)}
+        ${sub('= FLUSSO DELLA GESTIONE CORRENTE', R.flussoOperativo)}
+        ${line('Flussi da investimenti/finanziamenti (residuale)', R.residuo, '(quadratura)')}
+        ${sub('= Variazione delle disponibilità liquide', R.dLiquidita)}
+      </div>
+      <p class="text-[11px] text-ink-400 mt-4">Il flusso “residuale” quadra l’autofinanziamento operativo con la variazione effettiva di cassa: comprende investimenti, disinvestimenti, accensioni/rimborsi di finanziamenti e dividendi, non isolabili dai soli totali di bilancio.</p>
+    </div>`;
+}
+
+/* ---- 5.4 CCII ---- */
+function renderCCII(){
+  const cc=MODEL.ccii;
+  const sCls = cc.crisiLivello==='bad'?'from-bad/20 to-bad/5 border-bad/40':cc.crisiLivello==='warn'?'from-warn/20 to-warn/5 border-warn/40':'from-ok/20 to-ok/5 border-ok/40';
+  const sTxt = cc.crisiLivello==='bad'?'text-bad':cc.crisiLivello==='warn'?'text-warn':'text-ok';
+
+  const rows = cc.indici.map(x=>{
+    const cls = x.alert?'text-bad':'text-ok';
+    return `<tr class="border-b border-white/5">
+      <td class="py-2.5">
+        <div class="font-medium text-ink-100 text-[13px]">${x.lab}</div>
+        <div class="text-[11px] text-ink-400 font-mono">${x.sub}</div>
+      </td>
+      <td class="py-2.5 text-right num font-bold ${cls}">${x.v!==null?fmtNum(x.v,1)+x.unit:'N/D'}</td>
+      <td class="py-2.5 text-right num text-ink-300">${x.dir} ${fmtNum(x.soglia,1)}%</td>
+      <td class="py-2.5 text-right">${x.alert?'<span class="badge text-[10px] font-bold text-bad bg-bad/10 border border-bad/30 px-2 py-0.5 rounded-full">ALERT</span>':'<span class="badge text-[10px] font-bold text-ok bg-ok/10 border border-ok/30 px-2 py-0.5 rounded-full">OK</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  document.querySelector('[data-pane="ccii"]').innerHTML = `
+    <div class="rounded-2xl p-5 bg-gradient-to-br ${sCls} border">
+      <div class="flex items-center gap-3 mb-1">
+        <div class="w-3 h-3 rounded-full ${STATUS[cc.crisiLivello].dot}"></div>
+        <h3 class="font-display text-xl ${sTxt}">Esito gerarchia CCII</h3>
+      </div>
+      <p class="text-sm text-ink-200">${cc.crisiVerdetto}</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="card rounded-2xl p-4">
+        <p class="text-[11px] uppercase tracking-wider text-ink-400">1 · Patrimonio netto</p>
+        <p class="num text-2xl font-bold mt-1 ${cc.PN>0?'text-ok':'text-bad'}">${fmtEUR(cc.PN)}</p>
+        <p class="text-[12px] text-ink-300 mt-1">${cc.PN>0?'Positivo: si prosegue con il DSCR.':'≤ 0: presunzione di crisi (constatazione).'}</p>
+      </div>
+      <div class="card rounded-2xl p-4">
+        <p class="text-[11px] uppercase tracking-wider text-ink-400">2 · DSCR (stima 12m)</p>
+        <p class="num text-2xl font-bold mt-1 ${cc.dscr===null?'text-ink-400':cc.dscr>=1?'text-ok':'text-bad'}">${cc.dscr!==null?fmtNum(cc.dscr,2):'N/D'}</p>
+        <p class="text-[12px] text-ink-300 mt-1">Cassa + flussi operativi 12m / servizio del debito (${fmtEUR(cc.debtService)}).</p>
+      </div>
+      <div class="card rounded-2xl p-4">
+        <p class="text-[11px] uppercase tracking-wider text-ink-400">3 · Indici settoriali</p>
+        <p class="num text-2xl font-bold mt-1 ${cc.allFive?'text-bad':'text-ink-100'}">${cc.indici.filter(x=>x.alert).length} / 5</p>
+        <p class="text-[12px] text-ink-300 mt-1">${cc.allFive?'Tutti superati: presunzione di crisi.':'Non tutti superati.'}</p>
+      </div>
+    </div>
+
+    <div class="card rounded-2xl p-5">
+      <h3 class="font-display text-lg mb-1">5 indici settoriali CNDCEC</h3>
+      <p class="text-[12px] text-ink-400 mb-3">Settore: <span class="text-accent">${cc.settore.nome}</span>. L’alert scatta al raggiungimento/superamento della soglia nel verso indicato.</p>
+      <table class="w-full text-[13px]">
+        <thead><tr class="text-[11px] uppercase tracking-wider text-ink-400 border-b border-white/10">
+          <th class="text-left font-medium pb-2">Indice</th>
+          <th class="text-right font-medium pb-2">Valore</th>
+          <th class="text-right font-medium pb-2">Soglia</th>
+          <th class="text-right font-medium pb-2">Esito</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="text-[11px] text-ink-400 mt-3">La ragionevole presunzione di crisi richiede il superamento <strong>congiunto</strong> di tutte e 5 le soglie (solo in assenza di DSCR attendibile e con PN positivo).</p>
+    </div>`;
+}
+
+/* ---- 5.5 FORECAST ---- */
+function renderForecast(){
+  const f=MODEL.forecast;
+  document.querySelector('[data-pane="forecast"]').innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="card rounded-2xl p-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">Cassa iniziale</p><p class="num text-xl font-bold mt-1">${fmtEUR(f.startCash)}</p></div>
+      <div class="card rounded-2xl p-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">Cassa a 12 mesi</p><p class="num text-xl font-bold mt-1 ${f.endCash>=f.startCash?'text-ok':'text-warn'}">${fmtEUR(f.endCash)}</p></div>
+      <div class="card rounded-2xl p-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">Saldo minimo</p><p class="num text-xl font-bold mt-1 ${f.minCash<0?'text-bad':'text-ink-100'}">${fmtEUR(f.minCash)}</p><p class="text-[11px] text-ink-400">mese ${f.minMonth}</p></div>
+      <div class="card rounded-2xl p-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">Flusso operativo 12m</p><p class="num text-xl font-bold mt-1 ${f.operatingCF12>=0?'text-ok':'text-bad'}">${fmtEUR(f.operatingCF12)}</p></div>
+    </div>
+    <div class="card rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-display text-lg">Proiezione saldo di cassa · 12 mesi</h3>
+        <span class="text-[11px] text-ink-400">Regola i parametri nella sidebar →</span>
+      </div>
+      <div style="height:340px"><canvas id="cashChart"></canvas></div>
+      ${f.minCash<0?`<p class="text-[12px] text-bad mt-3">⚠ Il saldo proiettato scende sotto zero: prevedere copertura finanziaria o azioni sul capitale circolante (riduzione DSO, aumento DPO, gestione scorte).</p>`:''}
+    </div>`;
+  drawChart(f);
+}
+function drawChart(f){
+  const ctx=document.getElementById('cashChart');
+  if(!ctx) return;
+  if(chart) chart.destroy();
+  const neg = f.balance.some(v=>v<0);
+  chart=new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:['Inizio',...f.labels],
+      datasets:[{
+        label:'Saldo di cassa cumulato (€)',
+        data:[f.startCash,...f.balance],
+        borderColor: neg ? '#ef4444' : '#38bdf8',
+        backgroundColor:(c)=>{
+          const {ctx,chartArea}=c.chart; if(!chartArea) return 'rgba(56,189,248,.15)';
+          const g=ctx.createLinearGradient(0,chartArea.top,0,chartArea.bottom);
+          g.addColorStop(0, neg?'rgba(239,68,68,.30)':'rgba(56,189,248,.30)');
+          g.addColorStop(1,'rgba(56,189,248,0)'); return g;
+        },
+        fill:true, tension:.35, borderWidth:2.5,
+        pointRadius:3, pointBackgroundColor: neg?'#ef4444':'#38bdf8', pointHoverRadius:6,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ labels:{ color:'#c7d2ea', font:{family:'Manrope'} } },
+        tooltip:{ callbacks:{ label:(c)=>' '+fmtEUR(c.parsed.y) }, backgroundColor:'#0b1220', borderColor:'#27406e', borderWidth:1 }
+      },
+      scales:{
+        x:{ grid:{color:'rgba(255,255,255,.05)'}, ticks:{color:'#6b7ba3', font:{family:'JetBrains Mono'}} },
+        y:{ grid:{color:'rgba(255,255,255,.05)'}, ticks:{color:'#6b7ba3', font:{family:'JetBrains Mono'},
+            callback:(v)=> new Intl.NumberFormat('it-IT',{notation:'compact'}).format(v)+' €' } }
+      }
+    }
+  });
+}
+
+/* ---- 5.6 RELAZIONE ---- */
+function renderReport(){
+  const rep=MODEL.report;
+  // Il "Giudizio complessivo" è già evidenziato nel riquadro di sintesi in testa: nelle card mostro gli altri paragrafi
+  const blocks = rep.paragrafi.filter(par=>par.titolo!=='Giudizio complessivo').map(par=>{
+    const t = par.livello==='bad'?'text-bad':par.livello==='warn'?'text-warn':'text-ok';
+    const dot = STATUS[par.livello]?STATUS[par.livello].dot:'bg-ink-400';
+    return `<div class="card rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-2"><span class="w-2 h-2 rounded-full ${dot}"></span><h4 class="font-display text-lg ${t}">${par.titolo}</h4></div>
+      ${par.testo.map(x=>`<p class="text-[13.5px] text-ink-200 leading-relaxed mb-2 ${x.startsWith('⚠')?'hl':''}">${x}</p>`).join('')}
+    </div>`;
+  }).join('');
+  const oCls = rep.overall==='bad'?'from-bad/20 to-bad/5 border-bad/40':rep.overall==='warn'?'from-warn/20 to-warn/5 border-warn/40':'from-ok/20 to-ok/5 border-ok/40';
+  const oTxt = rep.overall==='bad'?'text-bad':rep.overall==='warn'?'text-warn':'text-ok';
+
+  document.querySelector('[data-pane="report"]').innerHTML = `
+    <div class="flex items-center justify-between">
+      <h3 class="font-display text-xl">Relazione sullo stato di salute aziendale</h3>
+      <button id="dlReport" class="text-[12px] px-3 py-2 rounded-lg bg-accent/15 border border-accent/40 text-accent hover:bg-accent/25 transition-colors">⬇ Scarica .md</button>
+    </div>
+    <div class="rounded-2xl p-5 bg-gradient-to-br ${oCls} border">
+      <h4 class="font-display text-lg ${oTxt} mb-1">Giudizio di sintesi</h4>
+      <p class="text-sm text-ink-200">${rep.overallTxt}</p>
+    </div>
+    ${blocks}`;
+  document.getElementById('dlReport').addEventListener('click', downloadReport);
+}
+
+function downloadReport(){
+  const M=MODEL, rep=M.report;
+  let md = `# Relazione sulla gestione e sullo stato di salute aziendale\n\n`;
+  if(M.meta.name) md += `**Società:** ${M.meta.name}\n\n`;
+  md += `**Esercizio:** ${M.meta.yearCurr||'t'} (confronto con ${M.meta.yearPrev||'t-1'})\n\n`;
+  md += `**Giudizio di sintesi:** ${rep.overallTxt}\n\n---\n\n`;
+  rep.paragrafi.forEach(p=>{ if(p.titolo==='Giudizio complessivo') return; md += `## ${p.titolo}\n\n`; p.testo.forEach(t=> md += `${t}\n\n`); });
+  md += `---\n\n### Principali indici\n\n`;
+  md += `| Indice | Valore |\n|---|---|\n`;
+  md += `| ROE | ${fmtPct(M.indici.ROE.v)} |\n| ROI | ${fmtPct(M.indici.ROI.v)} |\n| ROS | ${fmtPct(M.indici.ROS.v)} |\n`;
+  md += `| Current Ratio | ${fmtNum(M.indici.currentRatio.v,2)} |\n| Quick Ratio | ${fmtNum(M.indici.quickRatio.v,2)} |\n`;
+  md += `| Leverage | ${fmtNum(M.indici.leverage.v,2)} |\n| DSCR (stima) | ${M.ccii.dscr!==null?fmtNum(M.ccii.dscr,2):'N/D'} |\n`;
+  md += `\n*Documento generato automaticamente — strumento di supporto, non sostituisce il giudizio professionale.*\n`;
+  const blob=new Blob([md],{type:'text/markdown'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`relazione_${(M.meta.name||'bilancio').replace(/[^a-z0-9]+/gi,'_').toLowerCase()}_${M.meta.yearCurr||''}.md`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ---- rendering aggregato ---- */
+function renderAll(){
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('content').classList.remove('hidden');
+  document.getElementById('companyTag').classList.remove('hidden');
+  document.getElementById('companyName').textContent = MODEL.meta.name || 'Bilancio importato';
+  document.getElementById('companyYears').textContent = `${MODEL.meta.yearCurr||'t'} vs ${MODEL.meta.yearPrev||'t-1'}`;
+  renderDash(); renderIndici(); renderRendiconto(); renderCCII(); renderForecast(); renderReport();
+}
+
+/* ============================================================================
+   6) EVENTI UI
+   ============================================================================ */
+// Popola select settori
+(function initSectors(){
+  const sel=document.getElementById('sectorSel');
+  SETTORI_CCII.forEach(s=>{ const o=document.createElement('option'); o.value=s.k; o.textContent=s.nome; sel.appendChild(o); });
+  sel.value='manif';
+})();
+
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const t=btn.dataset.tab;
+    document.querySelectorAll('.pane').forEach(p=>p.classList.add('hidden'));
+    const pane=document.querySelector(`[data-pane="${t}"]`);
+    pane.classList.remove('hidden'); pane.classList.add('fade-in');
+    if(t==='forecast' && MODEL) drawChart(MODEL.forecast);   // ridisegna canvas quando visibile
+  });
+});
+
+// Slider labels
+const gEl=document.getElementById('pGrowth'), cEl=document.getElementById('pCost');
+const updLbl=()=>{ document.getElementById('lblGrowth').textContent=(gEl.value>0?'+':'')+gEl.value+'%';
+                   document.getElementById('lblCost').textContent=(cEl.value>0?'+':'')+cEl.value+'%'; };
+['pGrowth','pCost','pDSO','pDPO','sectorSel'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', ()=>{ updLbl(); recompute(); });
+});
+updLbl();
+
+// Caricamento file
+function handleFile(file){
+  const st=document.getElementById('parseStatus');
+  st.textContent='Lettura file…'; st.className='text-[11px] mt-3 text-ink-400';
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      PARSED=parseXBRL(e.target.result);
+      if(!PARSED.ok){ st.textContent='✕ '+PARSED.error; st.className='text-[11px] mt-3 text-bad'; return; }
+      st.textContent=`✓ Bilancio caricato (${PARSED.meta.yearCurr||'t'}${PARSED.meta.yearPrev?' / '+PARSED.meta.yearPrev:''}).`;
+      st.className='text-[11px] mt-3 text-ok';
+      recompute();
+    }catch(err){
+      st.textContent='✕ Errore inatteso: '+err.message; st.className='text-[11px] mt-3 text-bad';
+      console.error(err);
+    }
+  };
+  reader.onerror=()=>{ st.textContent='✕ Impossibile leggere il file.'; st.className='text-[11px] mt-3 text-bad'; };
+  reader.readAsText(file);
+}
+document.getElementById('fileInput').addEventListener('change',e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+const dz=document.getElementById('dropZone');
+['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('border-accent');}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('border-accent');}));
+dz.addEventListener('drop',e=>{ if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+
+// Demo
+document.getElementById('demoBtn').addEventListener('click',()=>{
+  PARSED=parseXBRL(SAMPLE_XBRL);
+  const st=document.getElementById('parseStatus');
+  st.textContent='✓ Esempio caricato (dati fittizi).'; st.className='text-[11px] mt-3 text-ok';
+  recompute();
+});
+
+/* ============================================================================
+   7) BILANCIO XBRL DI ESEMPIO (dati fittizi, tassonomia itcc-ci semplificata)
+   Due esercizi (2023 corrente / 2022 precedente) con contesti datati.
+   ============================================================================ */
+const SAMPLE_XBRL = `<?xml version="1.0" encoding="UTF-8"?>
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:itcc-ci="http://www.infocamere.it/itcc/ci">
+  <xbrli:context id="C2023"><xbrli:period><xbrli:instant>2023-12-31</xbrli:instant></xbrli:period></xbrli:context>
+  <xbrli:context id="C2022"><xbrli:period><xbrli:instant>2022-12-31</xbrli:instant></xbrli:period></xbrli:context>
+  <xbrli:context id="D2023"><xbrli:period><xbrli:startDate>2023-01-01</xbrli:startDate><xbrli:endDate>2023-12-31</xbrli:endDate></xbrli:period></xbrli:context>
+  <xbrli:context id="D2022"><xbrli:period><xbrli:startDate>2022-01-01</xbrli:startDate><xbrli:endDate>2022-12-31</xbrli:endDate></xbrli:period></xbrli:context>
+
+  <itcc-ci:DenominazioneSocieta contextRef="C2023">ALFA MANIFATTURE S.R.L.</itcc-ci:DenominazioneSocieta>
+
+  <!-- ATTIVO -->
+  <itcc-ci:TotaleImmobilizzazioni contextRef="C2023">1850000</itcc-ci:TotaleImmobilizzazioni>
+  <itcc-ci:TotaleImmobilizzazioni contextRef="C2022">1700000</itcc-ci:TotaleImmobilizzazioni>
+  <itcc-ci:TotaleRimanenze contextRef="C2023">620000</itcc-ci:TotaleRimanenze>
+  <itcc-ci:TotaleRimanenze contextRef="C2022">540000</itcc-ci:TotaleRimanenze>
+  <itcc-ci:TotaleCrediti contextRef="C2023">880000</itcc-ci:TotaleCrediti>
+  <itcc-ci:TotaleCrediti contextRef="C2022">760000</itcc-ci:TotaleCrediti>
+  <itcc-ci:TotaleDisponibilitaLiquide contextRef="C2023">145000</itcc-ci:TotaleDisponibilitaLiquide>
+  <itcc-ci:TotaleDisponibilitaLiquide contextRef="C2022">210000</itcc-ci:TotaleDisponibilitaLiquide>
+  <itcc-ci:TotaleRateiRiscontiAttivi contextRef="C2023">25000</itcc-ci:TotaleRateiRiscontiAttivi>
+  <itcc-ci:TotaleRateiRiscontiAttivi contextRef="C2022">20000</itcc-ci:TotaleRateiRiscontiAttivi>
+  <itcc-ci:TotaleAttivoCircolante contextRef="C2023">1645000</itcc-ci:TotaleAttivoCircolante>
+  <itcc-ci:TotaleAttivoCircolante contextRef="C2022">1510000</itcc-ci:TotaleAttivoCircolante>
+  <itcc-ci:TotaleAttivo contextRef="C2023">3520000</itcc-ci:TotaleAttivo>
+  <itcc-ci:TotaleAttivo contextRef="C2022">3230000</itcc-ci:TotaleAttivo>
+
+  <!-- PASSIVO -->
+  <itcc-ci:Capitale contextRef="C2023">300000</itcc-ci:Capitale>
+  <itcc-ci:TotalePatrimonioNetto contextRef="C2023">920000</itcc-ci:TotalePatrimonioNetto>
+  <itcc-ci:TotalePatrimonioNetto contextRef="C2022">860000</itcc-ci:TotalePatrimonioNetto>
+  <itcc-ci:TotaleFondiPerRischiEdOneri contextRef="C2023">60000</itcc-ci:TotaleFondiPerRischiEdOneri>
+  <itcc-ci:TotaleFondiPerRischiEdOneri contextRef="C2022">45000</itcc-ci:TotaleFondiPerRischiEdOneri>
+  <itcc-ci:TrattamentoFineRapportoLavoroSubordinato contextRef="C2023">210000</itcc-ci:TrattamentoFineRapportoLavoroSubordinato>
+  <itcc-ci:TrattamentoFineRapportoLavoroSubordinato contextRef="C2022">185000</itcc-ci:TrattamentoFineRapportoLavoroSubordinato>
+  <itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo contextRef="C2023">540000</itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo contextRef="C2022">430000</itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo contextRef="C2023">680000</itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo contextRef="C2022">760000</itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo contextRef="C2023">610000</itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo contextRef="C2022">520000</itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo contextRef="C2023">95000</itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo contextRef="C2022">70000</itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo contextRef="C2023">48000</itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo contextRef="C2022">35000</itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:TotaleDebitiTributari contextRef="C2023">95000</itcc-ci:TotaleDebitiTributari>
+  <itcc-ci:TotaleDebiti contextRef="C2023">2373000</itcc-ci:TotaleDebiti>
+  <itcc-ci:TotaleDebiti contextRef="C2022">2140000</itcc-ci:TotaleDebiti>
+  <itcc-ci:TotaleRateiRiscontiPassivi contextRef="C2023">57000</itcc-ci:TotaleRateiRiscontiPassivi>
+  <itcc-ci:TotaleRateiRiscontiPassivi contextRef="C2022">0</itcc-ci:TotaleRateiRiscontiPassivi>
+  <itcc-ci:TotalePassivo contextRef="C2023">3520000</itcc-ci:TotalePassivo>
+  <itcc-ci:TotalePassivo contextRef="C2022">3230000</itcc-ci:TotalePassivo>
+
+  <!-- CONTO ECONOMICO -->
+  <itcc-ci:RicaviVenditePrestazioni contextRef="D2023">4250000</itcc-ci:RicaviVenditePrestazioni>
+  <itcc-ci:RicaviVenditePrestazioni contextRef="D2022">3980000</itcc-ci:RicaviVenditePrestazioni>
+  <itcc-ci:TotaleValoreProduzione contextRef="D2023">4310000</itcc-ci:TotaleValoreProduzione>
+  <itcc-ci:TotaleValoreProduzione contextRef="D2022">4020000</itcc-ci:TotaleValoreProduzione>
+  <itcc-ci:TotaleCostiProduzione contextRef="D2023">4030000</itcc-ci:TotaleCostiProduzione>
+  <itcc-ci:TotaleCostiProduzione contextRef="D2022">3760000</itcc-ci:TotaleCostiProduzione>
+  <itcc-ci:DifferenzaValoreCostiProduzione contextRef="D2023">280000</itcc-ci:DifferenzaValoreCostiProduzione>
+  <itcc-ci:DifferenzaValoreCostiProduzione contextRef="D2022">260000</itcc-ci:DifferenzaValoreCostiProduzione>
+  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2023">240000</itcc-ci:TotaleAmmortamentiSvalutazioni>
+  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2022">220000</itcc-ci:TotaleAmmortamentiSvalutazioni>
+  <itcc-ci:TotaleCostiPerIlPersonale contextRef="D2023">980000</itcc-ci:TotaleCostiPerIlPersonale>
+  <itcc-ci:TotaleInteressiAltriOneriFinanziari contextRef="D2023">96000</itcc-ci:TotaleInteressiAltriOneriFinanziari>
+  <itcc-ci:TotaleInteressiAltriOneriFinanziari contextRef="D2022">82000</itcc-ci:TotaleInteressiAltriOneriFinanziari>
+  <itcc-ci:RisultatoPrimaImposte contextRef="D2023">184000</itcc-ci:RisultatoPrimaImposte>
+  <itcc-ci:RisultatoPrimaImposte contextRef="D2022">178000</itcc-ci:RisultatoPrimaImposte>
+  <itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate contextRef="D2023">58000</itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate>
+  <itcc-ci:UtilePerditaEsercizio contextRef="D2023">126000</itcc-ci:UtilePerditaEsercizio>
+  <itcc-ci:UtilePerditaEsercizio contextRef="D2022">118000</itcc-ci:UtilePerditaEsercizio>
+</xbrli:xbrl>`;
+</script>
 </body>
 </html>
