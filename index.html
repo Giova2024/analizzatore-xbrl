@@ -711,32 +711,21 @@ function computeModel(parsed, params){
   /* --- 4.2 CONTO ECONOMICO RICLASSIFICATO (valore aggiunto / margine di contribuzione) --- */
   M.ceRiclass = { curr: riclassCE(c, params.variab), prev: riclassCE(parsed.prior, params.variab) };
 
-  /* --- 4.3 RENDICONTO FINANZIARIO (metodo indiretto, semplificato) --- */
-  const dRim   = (c.rimanenze||0) - (p.rimanenze||0);
-  const dCred  = (c.creditiAC||0) - (p.creditiAC||0);
-  const dDeb   = (c.debiti||0)    - (p.debiti||0);
-  const dTfr   = (c.tfr||0)       - (p.tfr||0);
-  const dFondi = (c.fondiRischi||0) - (p.fondiRischi||0);
-  const amm    = c.ammortamenti || 0;
-  const flussoReddituale = utile + amm + dTfr + dFondi;          // autofinanziamento
-  const variazioneCCN    = (-dRim) + (-dCred) + (dDeb);          // assorbimento/liberazione CCN
-  const flussoOperativo  = flussoReddituale + variazioneCCN;     // flusso della gestione corrente
-  const dLiquidita       = (c.liquidita||0) - (p.liquidita||0);
-  const residuo          = dLiquidita - flussoOperativo;         // investimenti/finanziamenti (residuale)
-  M.rendiconto = { utile, amm, dTfr, dFondi, dRim, dCred, dDeb,
-                   flussoReddituale, variazioneCCN, flussoOperativo, dLiquidita, residuo, hasPrior: !!parsed.prior };
-
-  /* --- 4.4 FORECAST 12 MESI + BILANCIO PREVISIONALE t+1 (reagiscono ai parametri) --- */
+  /* --- 4.3 FORECAST 12 MESI + BILANCIO PREVISIONALE t+1 (reagiscono ai parametri) --- */
   M.forecast = buildForecast(c, params);
   M.fcst = buildPrevisionale(c, M.forecast, params);
   M.riclassF = riclassSP(M.fcst);
   M.ceRiclass.fcst = riclassCE(M.fcst, params.variab);
 
+  /* --- 4.4 RENDICONTO FINANZIARIO (metodo indiretto): consuntivo t vs t-1 e previsionale t+1 vs t --- */
+  M.rendiconto  = parsed.prior ? calcRendiconto(parsed.prior, c) : calcRendiconto(null, c);
+  M.rendicontoF = calcRendiconto(c, M.fcst);
+
   /* --- 4.5 INDICI DI BILANCIO: esercizio precedente, corrente, previsionale --- */
   const vals = {
-    prev: parsed.prior ? calcIndici(parsed.prior, M.riclassP, M.ceRiclass.prev) : {},
-    curr: calcIndici(c, R, M.ceRiclass.curr),
-    fcst: calcIndici(M.fcst, M.riclassF, M.ceRiclass.fcst),
+    prev: parsed.prior ? calcIndici(parsed.prior, M.riclassP, M.ceRiclass.prev, null) : {},
+    curr: calcIndici(c, R, M.ceRiclass.curr, parsed.prior ? M.rendiconto : null),
+    fcst: calcIndici(M.fcst, M.riclassF, M.ceRiclass.fcst, M.rendicontoF),
   };
   M.indici = { ebit:M.ceRiclass.curr.EBIT, ricavi:c.ricavi||0, utile };
   for(const d of IND_DEFS){
@@ -754,7 +743,9 @@ function computeModel(parsed, params){
   const alertN = arr => arr.filter(x=>x.alert).length;
   const allFive = ind.every(x=>x.alert);
 
-  const dscr = calcDSCR(c, M.forecast, 12);
+  const dscrCalc = calcDSCR(c, M.forecast, 12);
+  const dscrMan = params.dscrMan && params.dscrMan.on ? calcDSCRManuale(dscrCalc, params.dscrMan.v) : null;
+  const dscr = dscrMan || dscrCalc;                  // se attivati, i dati manuali guidano il giudizio
   const dscr6 = calcDSCR(c, M.forecast, 6);
   const dscrPrud = calcDSCR(c, M.forecast, 12, true);
   // Stress test: DSCR con ricavi ridotti / incassi più lenti
@@ -819,7 +810,7 @@ function computeModel(parsed, params){
   M.ccii = {
     settore, attivo: c.totaleAttivo || R.capInvestito || 0, PN, PNf, capitale:cap, perditaTerzo,
     indici: ind, indiciPrev: indP, indiciFcst: indF, allFive, nAlert: alertN(ind), nAlertFcst: alertN(indF),
-    dscr: dscr.v, dscrDett: dscr, dscr6, dscrPrud, stress,
+    dscr: dscr.v, dscrDett: dscr, dscrCalc, dscrMan, dscr6, dscrPrud, stress,
     debtService: dscr.den, quoteCapitale: dscr.quote, cassaPerDebito: dscr.num,
     crisiVerdetto, crisiLivello, avvisiProspettici, segnali
   };
@@ -827,6 +818,36 @@ function computeModel(parsed, params){
   /* --- 4.7 RELAZIONE FINALE --- */
   M.report = buildReport(M);
   return M;
+}
+
+/* ----------------------------------------------------------------------------
+   4.4b RENDICONTO FINANZIARIO (metodo indiretto) tra due stati patrimoniali
+   Y0 = inizio periodo (null se manca: solo autofinanziamento), Y1 = fine periodo.
+   Flusso operativo → investimenti (Δ immobilizzazioni + ammortamenti) → free cash flow
+   → flussi finanziari (Δ debiti finanziari, apporti/dividendi) → variazione di cassa.
+---------------------------------------------------------------------------- */
+function calcRendiconto(Y0, Y1){
+  const n = x => x || 0;
+  const has = !!Y0, Z = Y0 || {};
+  const d = k => has ? n(Y1[k]) - n(Z[k]) : 0;
+  const finTot = Y => n(Y.debitiFinBreve) + n(Y.debitiFinOltre);
+  const utile = n(Y1.utileEsercizio), amm = n(Y1.ammortamenti);
+  const dTfr = d('tfr'), dFondi = d('fondiRischi');
+  const flussoReddituale = utile + amm + dTfr + dFondi;                    // autofinanziamento
+  const dRim = d('rimanenze'), dCred = d('creditiAC');
+  const dDeb = has ? (n(Y1.debiti) - finTot(Y1)) - (n(Z.debiti) - finTot(Z)) : 0;   // Δ debiti operativi (non finanziari)
+  const dRatei = has ? (n(Y1.rateiPassivi) - n(Y1.rateiAttivi)) - (n(Z.rateiPassivi) - n(Z.rateiAttivi)) : 0;
+  const variazioneCCN = -dRim - dCred + dDeb + dRatei;
+  const flussoOperativo = flussoReddituale + variazioneCCN;
+  const investimenti = has ? -(d('immobilizzazioni') + amm) : 0;          // investimenti netti (uscita = negativo)
+  const freeCashFlow = flussoOperativo + investimenti;
+  const dDebFin = has ? finTot(Y1) - finTot(Z) : 0;
+  const dMezziPropri = has ? d('patrimonioNetto') - utile : 0;           // apporti (+) / dividendi (−)
+  const flussoFinanziario = dDebFin + dMezziPropri;
+  const dLiquidita = has ? d('liquidita') : 0;
+  const residuo = dLiquidita - freeCashFlow - flussoFinanziario;          // altre variazioni non classificate
+  return { hasPrior:has, utile, amm, dTfr, dFondi, flussoReddituale, dRim, dCred, dDeb, dRatei, variazioneCCN,
+           flussoOperativo, investimenti, freeCashFlow, dDebFin, dMezziPropri, flussoFinanziario, dLiquidita, residuo };
 }
 
 /* ----------------------------------------------------------------------------
@@ -931,6 +952,7 @@ const IND_GROUPS = [
   { g:'sol',  lab:'Solidità patrimoniale', sub:'Equilibrio tra fonti e impieghi e dipendenza dai terzi.' },
   { g:'rot',  lab:'Ciclo del circolante', sub:'Durata media di incassi, scorte e pagamenti (giorni).' },
   { g:'debt', lab:'Sostenibilità del debito', sub:'Peso dell’indebitamento finanziario rispetto a margini e mezzi propri.' },
+  { g:'cf',   lab:'Flussi di cassa', sub:'Capacità di trasformare il reddito in liquidità (dal rendiconto finanziario; la colonna previsionale deriva dal budget di tesoreria).' },
 ];
 const hi = (good, mid) => v => (v===null||!isFinite(v)) ? 'na' : v>=good?'ok':(v>=mid?'warn':'bad');
 const lo = (good, mid) => v => (v===null||!isFinite(v)) ? 'na' : v<=good?'ok':(v<=mid?'warn':'bad');
@@ -994,12 +1016,29 @@ const IND_DEFS = [
     com:v=> v===null?'MOL non positivo.':v<20?'Gli oneri finanziari assorbono una quota contenuta del MOL.':v<40?'Oneri finanziari rilevanti sul MOL.':'Gli oneri finanziari erodono gran parte del MOL.' },
   { k:'intCov', g:'debt', lab:'Copertura interessi', unit:'x', formula:'EBIT / Oneri finanziari', status:hi(3,1.5),
     com:v=> v<1.5?'Il reddito operativo copre a fatica gli interessi.':v<3?'Copertura degli interessi sufficiente.':'Ampia copertura degli interessi.' },
+  // Flussi di cassa
+  { k:'autofin', g:'cf', lab:'Autofinanziamento (cash flow)', unit:'€', formula:'Utile + ammortamenti + accantonamenti', status:v=> v===null?'na':v>0?'ok':'bad',
+    com:v=> v<=0?'La gestione non genera risorse interne.':'Risorse generate internamente dalla gestione reddituale.' },
+  { k:'cfRicavi', g:'cf', lab:'Cash flow / Ricavi', unit:'%', formula:'Autofinanziamento / Ricavi', status:hi(8,4),
+    com:v=> v<4?'Bassa capacità di generare risorse per unità di fatturato.':v<8?'Capacità di autofinanziamento nella media.':'Buona capacità di autofinanziamento.' },
+  { k:'cfAttivo', g:'cf', lab:'Cash flow / Totale attivo', unit:'%', formula:'Autofinanziamento / Totale attivo', status:hi(5,2),
+    com:v=> v<2?'Rendimento monetario dell’attivo basso.':v<5?'Rendimento monetario dell’attivo discreto.':'Buon rendimento monetario dell’attivo.' },
+  { k:'flussoOp', g:'cf', lab:'Flusso di cassa operativo', unit:'€', formula:'Autofinanziamento ± variazione del circolante', status:v=> v===null?'na':v>0?'ok':'bad',
+    com:v=> v<=0?'La gestione corrente assorbe liquidità.':'La gestione corrente genera liquidità.' },
+  { k:'fcoRicavi', g:'cf', lab:'Flusso operativo / Ricavi', unit:'%', formula:'Flusso di cassa operativo / Ricavi', status:hi(5,0),
+    com:v=> v<0?'Le vendite non si traducono in cassa.':v<5?'Conversione delle vendite in cassa contenuta.':'Buona conversione delle vendite in cassa.' },
+  { k:'cashConv', g:'cf', lab:'Conversione del MOL in cassa', unit:'%', formula:'Flusso di cassa operativo / MOL', status:hi(70,40),
+    com:v=> v<40?'Gran parte del MOL resta assorbita dal circolante.':v<70?'Conversione del MOL in cassa parziale.':'Il MOL si trasforma in cassa.' },
+  { k:'fcf', g:'cf', lab:'Free cash flow', unit:'€', formula:'Flusso operativo − investimenti netti', status:v=> v===null?'na':v>=0?'ok':'warn',
+    com:v=> v<0?'Flussi operativi insufficienti a finanziare gli investimenti.':'Cassa disponibile per rimborsare debiti o remunerare i soci.' },
+  { k:'debFinCF', g:'cf', lab:'Anni di rimborso del debito', unit:'anni', formula:'Debiti finanziari / Autofinanziamento', status:(v,x)=> x.debitiFin>0 && !(x.autofin>0) ? 'bad' : lo(4,7)(v),
+    com:v=> v===null?'Autofinanziamento non positivo: debito non rimborsabile con le risorse interne.':v<4?'Debito rimborsabile in pochi anni di cash flow.':v<7?'Tempi di rimborso significativi.':'Tempi di rimborso molto lunghi.' },
 ];
 
 // Indici per cui un valore più basso è migliore (frecce di tendenza)
-const IND_LOWER_BETTER = ['ROD','leverage','ggCrediti','ggMagazzino','ggFornitori','cicloCassa','PFN','pfnEbitda','pfnPn','oneriMol'];
+const IND_LOWER_BETTER = ['ROD','leverage','ggCrediti','ggMagazzino','ggFornitori','cicloCassa','PFN','pfnEbitda','pfnPn','oneriMol','debFinCF'];
 
-function calcIndici(Y, R, CE){
+function calcIndici(Y, R, CE, RF){
   if(!Y || !R || !CE) return {};
   const n = x => x || 0, pc = (a,b)=> { const r=safeDiv(a,b); return r===null?null:r*100; };
   const ric = n(Y.ricavi), EBIT = CE.EBIT, MOL = CE.MOL, utile = n(Y.utileEsercizio), PN = R.PN;
@@ -1009,6 +1048,7 @@ function calcIndici(Y, R, CE){
   const consumi = CE.det.materie>0 ? CE.det.materie : ric;
   const acquisti = CE.costiEsterni;
   const ggCrediti = ric ? clienti/ric*365 : null;
+  const autofin = utile + n(Y.ammortamenti) + n(Y.accantonamenti);
   const ggMagazzino = consumi ? R.rim/consumi*365 : null;
   const ggFornitori = (Y.debitiFornitori!==null && Y.debitiFornitori!==undefined && acquisti) ? Y.debitiFornitori/acquisti*365 : null;
   return {
@@ -1023,8 +1063,13 @@ function calcIndici(Y, R, CE){
     PFN: R.debitiFin>0 || R.liqImm>0 ? R.PFN : null,
     pfnEbitda: MOL>0 ? R.PFN/MOL : null, pfnPn: PN>0 ? R.PFN/PN : null,
     oneriMol: MOL>0 ? oneri/MOL*100 : null, intCov: oneri>0 ? EBIT/oneri : null,
+    // flussi di cassa (RF = rendiconto del periodo, se disponibile)
+    autofin, cfRicavi: pc(autofin, ric), cfAttivo: pc(autofin, n(Y.totaleAttivo) || R.capInvestito),
+    flussoOp: RF ? RF.flussoOperativo : null, fcoRicavi: RF ? pc(RF.flussoOperativo, ric) : null,
+    cashConv: (RF && MOL>0) ? RF.flussoOperativo/MOL*100 : null, fcf: RF ? RF.freeCashFlow : null,
+    debFinCF: (R.debitiFin>0 && autofin>0) ? R.debitiFin/autofin : (R.debitiFin>0 ? null : 0),
     // grandezze di appoggio (scomposizione ROE, stati)
-    MOL, EBIT, utile, PN, capInvestito:R.capInvestito, ric
+    MOL, EBIT, utile, PN, capInvestito:R.capInvestito, ric, debitiFin:R.debitiFin
   };
 }
 // Scomposizione del ROE (DuPont): ROE = ROS × ROT × Leverage × incidenza gestione non caratteristica
@@ -1066,6 +1111,25 @@ function calcCCII(Y, R, s){
      (rimborsi indicati nei parametri, altrimenti debiti finanziari entro 12 mesi pro-quota)
    Versione prudenziale: il denominatore include anche i debiti tributari e previdenziali.
 ---------------------------------------------------------------------------- */
+// DSCR con dati inseriti dall'utente: ogni voce vuota usa il valore calcolato.
+// Voci aggiuntive: linee di credito disponibili (numeratore) e debiti scaduti da pagare (denominatore).
+const DSCR_VOCI = [
+  { k:'cassa', lab:'Cassa iniziale', seg:1, lato:'num' },
+  { k:'operativo', lab:'Flusso di cassa operativo', seg:1, lato:'num' },
+  { k:'fidi', lab:'Linee di credito disponibili non utilizzate', seg:1, lato:'num', soloManuale:true },
+  { k:'imposte', lab:'Imposte', seg:-1, lato:'num' },
+  { k:'investimenti', lab:'Investimenti non differibili', seg:-1, lato:'num' },
+  { k:'quote', lab:'Quote capitale in scadenza', seg:1, lato:'den' },
+  { k:'oneri', lab:'Oneri finanziari', seg:1, lato:'den' },
+  { k:'scaduti', lab:'Debiti scaduti (fiscali, previdenziali, fornitori) da pagare', seg:1, lato:'den', soloManuale:true },
+];
+function calcDSCRManuale(base, man){
+  const val = k => (man[k]!==null && man[k]!==undefined && man[k]!=='') ? +man[k] : (base[k] || 0);
+  const out = { h:12, manuale:true };
+  let num=0, den=0;
+  for(const d of DSCR_VOCI){ out[d.k] = val(d.k); if(d.lato==='num') num += d.seg*out[d.k]; else den += out[d.k]; }
+  return { ...out, num, den, fiscPrev:0, v: den>0 ? num/den : null };
+}
 function calcDSCR(c, F, h=12, prudenziale=false){
   const s = k => F[k].slice(0,h).reduce((a,b)=>a+b,0);
   const operativo = s('operativo'), imposte = s('imposte'), investimenti = s('investimenti'), oneri = s('oneriFin');
@@ -1073,7 +1137,7 @@ function calcDSCR(c, F, h=12, prudenziale=false){
   const fiscPrev = prudenziale ? (c.debitiTributari||0) + (c.debitiPrevidenziali||0) : 0;
   const num = F.startCash + operativo - imposte - investimenti;
   const den = oneri + quote + fiscPrev;
-  return { v: den>0 ? num/den : null, num, den, h, cassa:F.startCash, operativo, imposte, investimenti, oneri, quote, fiscPrev };
+  return { v: den>0 ? num/den : null, num, den, h, cassa:F.startCash, operativo, imposte, investimenti, oneri, quote, fiscPrev, fidi:0, scaduti:0 };
 }
 
 /* ----------------------------------------------------------------------------
@@ -1341,6 +1405,7 @@ const FC_DEFAULT = { growth:3, dso:90, costExt:2, costPers:2, dpo:75, capex:0, r
 const FC_PERCENT = ['growth','costExt','costPers','onFin'];
 let VARIAB = { ...VARIAB_DEFAULT };      // % di variabilità dei costi (CE a margine di contribuzione)
 let VARIAB_OPEN = false;                 // stato del pannello ipotesi di variabilità
+let DSCR_MAN = { on:false, v:{} };       // dati manuali del DSCR (voce vuota = valore calcolato)
 
 function readForecastParams(){
   const P = {};
@@ -1372,7 +1437,7 @@ function descrIpotesi(P){
 }
 
 function currentParams(){
-  return { ...readForecastParams(), variab:{ ...VARIAB }, sector: document.getElementById('sectorSel').value };
+  return { ...readForecastParams(), variab:{ ...VARIAB }, dscrMan:{ on:DSCR_MAN.on, v:{ ...DSCR_MAN.v } }, sector: document.getElementById('sectorSel').value };
 }
 
 function recompute(){
@@ -1452,6 +1517,7 @@ function fmtInd(v, unit){
     case 'pp': return (v>0?'+':'')+fmtNum(v,1)+' pp';
     case '€':  return fmtEUR(v);
     case 'gg': return fmtNum(v,0)+' gg';
+    case 'anni': return fmtNum(v,1)+' anni';
     default:   return fmtNum(v,2);
   }
 }
@@ -1645,7 +1711,7 @@ function renderIndici(){
   }).join('');
 
   document.querySelector('[data-pane="indici"]').innerHTML = `
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">${summary}</div>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">${summary}</div>
     <p class="text-[11px] text-ink-400">Esito riferito all’esercizio ${M.meta.yearCurr||'t'}; il colore della colonna “Previsionale” indica l’esito atteso con i parametri dei flussi di cassa. ▲▼ = variazione rispetto all’esercizio precedente (verde se migliora).</p>
     ${groups}`;
 }
@@ -1665,41 +1731,80 @@ function dupontBox(){
 }
 
 /* ---- 5.3 RENDICONTO FINANZIARIO ---- */
+// Voci del rendiconto (chiave, etichetta, tipo) — condivise con l'export Excel
+const RF_ROWS = [
+  ['utile','Utile (perdita) d’esercizio'], ['amm','+ Ammortamenti e svalutazioni'], ['dTfr','± Variazione TFR'], ['dFondi','± Variazione fondi rischi e oneri'],
+  ['flussoReddituale','= Autofinanziamento (flusso reddituale)','sub'],
+  ['dRim','− Variazione rimanenze',null,-1], ['dCred','− Variazione crediti',null,-1], ['dDeb','+ Variazione debiti operativi'], ['dRatei','± Variazione ratei e risconti'],
+  ['variazioneCCN','= Variazione del capitale circolante netto','sub'],
+  ['flussoOperativo','= FLUSSO DI CASSA OPERATIVO','sub'],
+  ['investimenti','− Investimenti netti in immobilizzazioni'],
+  ['freeCashFlow','= FREE CASH FLOW','sub'],
+  ['dDebFin','± Variazione debiti finanziari'], ['dMezziPropri','± Apporti di capitale / dividendi'],
+  ['flussoFinanziario','= Flusso della gestione finanziaria','sub'],
+  ['residuo','± Altre variazioni non classificate'],
+  ['dLiquidita','= VARIAZIONE DELLE DISPONIBILITÀ LIQUIDE','sub'],
+];
 function renderRendiconto(){
-  const R=MODEL.rendiconto;
-  const line=(label,val,note='')=>`<div class="flex items-center justify-between py-2 border-b border-white/5">
-      <span class="text-ink-300 text-[13px]">${label}${note?`<span class="text-ink-400 text-[11px]"> ${note}</span>`:''}</span>
-      <span class="num text-[14px] ${val<0?'text-bad':'text-ink-100'}">${fmtEUR(val)}</span></div>`;
-  const sub=(label,val)=>`<div class="flex items-center justify-between py-2.5 border-b border-white/10 bg-white/[.03] px-2 rounded">
-      <span class="font-semibold text-ink-100 text-[13px]">${label}</span>
-      <span class="num font-bold text-[15px] ${val<0?'text-bad':'text-ok'}">${fmtEUR(val)}</span></div>`;
-
-  const warn = !R.hasPrior ? `<p class="text-[12px] text-warn mb-3">⚠ Manca l’esercizio precedente (t-1): le variazioni del capitale circolante non sono calcolabili e il rendiconto è limitato all’autofinanziamento.</p>`:'';
-
+  const R=MODEL.rendiconto, F=MODEL.rendicontoF, M=MODEL;
+  const cell = (v,t) => `<td class="py-2 text-right num ${t==='sub'?(v<0?'text-bad font-bold':'text-ok font-bold'):(v<0?'text-bad':'text-ink-100')}">${fmtEUR(v)}</td>`;
+  const rows = RF_ROWS.map(([k,l,t,sg])=>{
+    if(k==='residuo' && Math.abs(R.residuo)<1 && Math.abs(F.residuo)<1) return '';
+    const s = sg||1;
+    return `<tr class="border-b border-white/5 ${t==='sub'?'bg-white/[.03]':''}">
+      <td class="py-2 text-[13px] ${t==='sub'?'font-semibold text-ink-100':'text-ink-300'}">${l}</td>
+      ${R.hasPrior || ['utile','amm','flussoReddituale'].includes(k) ? cell(R[k]*s,t) : '<td class="py-2 text-right text-ink-400">—</td>'}
+      ${cell(F[k]*s,t)}</tr>`;
+  }).join('');
+  const warn = !R.hasPrior ? `<p class="text-[12px] text-warn mb-3">⚠ Manca l’esercizio precedente: il rendiconto consuntivo è limitato all’autofinanziamento.</p>`:'';
   document.querySelector('[data-pane="rendi"]').innerHTML = `
     <div class="card rounded-2xl p-5">
-      <h3 class="font-display text-lg mb-1">Rendiconto Finanziario <span class="text-ink-400 text-sm">— metodo indiretto (semplificato)</span></h3>
-      <p class="text-[12px] text-ink-400 mb-4">Ricostruito dall’utile d’esercizio rettificato per componenti non monetarie e variazioni del CCN (confronto t vs t-1).</p>
+      <h3 class="font-display text-lg mb-1">Rendiconto Finanziario <span class="text-ink-400 text-sm">— metodo indiretto</span></h3>
+      <p class="text-[12px] text-ink-400 mb-4">Consuntivo: confronto ${M.meta.yearCurr||'t'} vs ${M.meta.yearPrev||'t-1'}. Previsionale: bilancio a 12 mesi costruito dal budget di tesoreria, si aggiorna con i parametri dei flussi di cassa.</p>
       ${warn}
-      <div class="space-y-0.5">
-        ${line('Utile (perdita) d’esercizio', R.utile)}
-        ${line('+ Ammortamenti e svalutazioni', R.amm, '(non monetari)')}
-        ${line('+/- Variazione TFR', R.dTfr)}
-        ${line('+/- Variazione Fondi rischi e oneri', R.dFondi)}
-        ${sub('= Autofinanziamento (flusso reddituale)', R.flussoReddituale)}
-        ${line('- Variazione Rimanenze', -R.dRim, `(Δ ${fmtEUR(R.dRim)})`)}
-        ${line('- Variazione Crediti', -R.dCred, `(Δ ${fmtEUR(R.dCred)})`)}
-        ${line('+ Variazione Debiti', R.dDeb, `(Δ ${fmtEUR(R.dDeb)})`)}
-        ${sub('= Variazione del Capitale Circolante Netto', R.variazioneCCN)}
-        ${sub('= FLUSSO DELLA GESTIONE CORRENTE', R.flussoOperativo)}
-        ${line('Flussi da investimenti/finanziamenti (residuale)', R.residuo, '(quadratura)')}
-        ${sub('= Variazione delle disponibilità liquide', R.dLiquidita)}
-      </div>
-      <p class="text-[11px] text-ink-400 mt-4">Il flusso “residuale” quadra l’autofinanziamento operativo con la variazione effettiva di cassa: comprende investimenti, disinvestimenti, accensioni/rimborsi di finanziamenti e dividendi, non isolabili dai soli totali di bilancio.</p>
+      <div class="overflow-x-auto"><table class="w-full text-[13px] min-w-[520px]">
+        <thead><tr class="text-[11px] uppercase tracking-wider text-ink-400 border-b border-white/10">
+          <th class="text-left font-medium pb-2">Voce</th>
+          <th class="text-right font-medium pb-2">Consuntivo ${M.meta.yearCurr||'t'}</th>
+          <th class="text-right font-medium pb-2 text-accent">Previsionale</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <p class="text-[11px] text-ink-400 mt-4">Investimenti netti = variazione delle immobilizzazioni + ammortamenti. Le “altre variazioni” quadrano il rendiconto con la variazione effettiva di cassa quando il bilancio non fornisce il dettaglio necessario.</p>
     </div>`;
 }
 
 /* ---- 5.4 CCII ---- */
+// Tabella DSCR: colonna "Calcolato" (dal budget di tesoreria) e, se attivata, colonna "Manuale" modificabile
+function dscrTable(cc, dCls, dscrTxt){
+  const C = cc.dscrCalc, on = DSCR_MAN.on, Mv = cc.dscrMan;
+  const sign = d => d.seg<0 ? '− ' : (d.k==='cassa'||d.k==='quote' ? '' : '+ ');
+  const inp = d => `<input type="number" step="1000" data-dscr="${d.k}" class="var-in num w-28"
+                     value="${DSCR_MAN.v[d.k]??''}" placeholder="${d.soloManuale?'0':fmtNum(C[d.k]||0)}">`;
+  const riga = d => (!on && d.soloManuale) ? '' : `<tr class="border-b border-white/5 text-ink-300">
+      <td class="py-1.5 pr-2">${sign(d)}${d.lab}</td>
+      <td class="py-1.5 text-right num">${d.soloManuale?'—':fmtEUR(C[d.k])}</td>
+      ${on?`<td class="py-1.5 text-right no-print">${inp(d)}</td><td class="py-1.5 text-right num hidden print:table-cell">${fmtEUR(Mv[d.k])}</td>`:''}</tr>`;
+  const tot = (lab, kc, km) => `<tr class="border-b border-white/10 font-semibold text-ink-100 bg-white/[.03]">
+      <td class="py-1.5">${lab}</td><td class="py-1.5 text-right num">${fmtEUR(C[kc])}</td>${on?`<td class="py-1.5 text-right num">${fmtEUR(Mv[km])}</td>`:''}</tr>`;
+  const num = DSCR_VOCI.filter(d=>d.lato==='num'), den = DSCR_VOCI.filter(d=>d.lato==='den');
+  return `<label class="no-print flex items-center gap-2 text-[12px] text-accent mb-2 cursor-pointer select-none">
+      <input id="dscrManOn" type="checkbox" class="accent-accent" ${on?'checked':''}> Inserisci dati manuali (es. dal piano di rimborso dei finanziamenti)</label>
+    <table class="w-full text-[13px]">
+      <thead><tr class="text-[10px] uppercase tracking-wider text-ink-400 border-b border-white/10">
+        <th class="text-left font-medium pb-1.5">Voce (12 mesi)</th><th class="text-right font-medium pb-1.5">Calcolato</th>
+        ${on?'<th class="text-right font-medium pb-1.5 text-accent">Manuale</th>':''}</tr></thead>
+      <tbody>
+        ${num.map(riga).join('')}
+        ${tot('= Risorse al servizio del debito (A)', 'num', 'num')}
+        ${den.map(riga).join('')}
+        ${tot('= Servizio del debito (B)', 'den', 'den')}
+        <tr class="font-bold"><td class="py-2 text-ink-100">DSCR = A / B</td>
+          <td class="py-2 text-right num ${dCls(C.v)}">${dscrTxt(C.v)}</td>
+          ${on?`<td class="py-2 text-right num ${dCls(Mv.v)}">${dscrTxt(Mv.v)}</td>`:''}</tr>
+      </tbody></table>
+    ${on?`<div class="no-print flex items-center justify-between mt-2">
+        <p class="text-[11px] text-ink-400">Le voci lasciate vuote usano il valore calcolato. Il DSCR manuale guida il giudizio CCII.</p>
+        <button id="dscrManReset" class="text-[11px] px-2 py-1 rounded bg-navy-700 hover:bg-navy-600 text-ink-300">↺ Azzera</button></div>`:''}`;
+}
 function renderCCII(){
   const M=MODEL, cc=M.ccii, D=cc.dscrDett;
   const sCls = cc.crisiLivello==='bad'?'from-bad/20 to-bad/5 border-bad/40':cc.crisiLivello==='warn'?'from-warn/20 to-warn/5 border-warn/40':'from-ok/20 to-ok/5 border-ok/40';
@@ -1756,9 +1861,9 @@ function renderCCII(){
         <p class="text-[11px] text-ink-400 mt-1">Capitale sociale ${cc.capitale?fmtEUR(cc.capitale):'N/D'} · PN previsionale <span class="${cc.PNf>0?'text-ink-300':'text-bad'}">${fmtEUR(cc.PNf)}</span></p>
       </div>
       <div class="card rounded-2xl p-4">
-        <p class="text-[11px] uppercase tracking-wider text-ink-400">2 · DSCR 12 mesi</p>
+        <p class="text-[11px] uppercase tracking-wider text-ink-400">2 · DSCR 12 mesi${cc.dscrMan?' <span class="text-accent normal-case tracking-normal">(dati manuali)</span>':''}</p>
         <p class="num text-2xl font-bold mt-1 ${dCls(cc.dscr)}">${dscrTxt(cc.dscr)}</p>
-        <p class="text-[12px] text-ink-300 mt-1">6 mesi: <span class="num ${dCls(cc.dscr6.v)}">${dscrTxt(cc.dscr6.v)}</span> · prudenziale: <span class="num ${dCls(cc.dscrPrud.v)}">${dscrTxt(cc.dscrPrud.v)}</span></p>
+        <p class="text-[12px] text-ink-300 mt-1">${cc.dscrMan?'Calcolati · ':''}6 mesi: <span class="num ${dCls(cc.dscr6.v)}">${dscrTxt(cc.dscr6.v)}</span> · prudenziale: <span class="num ${dCls(cc.dscrPrud.v)}">${dscrTxt(cc.dscrPrud.v)}</span></p>
         <p class="text-[11px] text-ink-400 mt-1">≥ 1,2 adeguato · 1–1,2 margine ridotto · &lt; 1 insufficiente</p>
       </div>
       <div class="card rounded-2xl p-4">
@@ -1772,19 +1877,9 @@ function renderCCII(){
     <div class="card rounded-2xl p-5">
       <h3 class="font-display text-lg mb-1">DSCR — Debt Service Coverage Ratio</h3>
       <p class="text-[12px] text-ink-400 mb-3">Calcolato sul budget di tesoreria (approccio CNDCEC): risorse disponibili nei 12 mesi per servire il debito finanziario. Si aggiorna con i parametri dei flussi di cassa.</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
-          <table class="w-full text-[13px]"><tbody>
-            ${dRow('Cassa iniziale', D.cassa)}
-            ${dRow('+ Flusso di cassa operativo', D.operativo)}
-            ${dRow('− Imposte', D.imposte, '')}
-            ${dRow('− Investimenti', D.investimenti, '')}
-            ${dRow('= Risorse al servizio del debito (A)', D.num, '', true)}
-            ${dRow('Quote capitale in scadenza', D.quote)}
-            ${dRow('+ Oneri finanziari', D.oneri)}
-            ${dRow('= Servizio del debito (B)', D.den, '', true)}
-            <tr class="font-bold"><td class="py-2 text-ink-100">DSCR = A / B</td><td class="py-2 text-right num ${dCls(cc.dscr)}">${dscrTxt(cc.dscr)}</td></tr>
-          </tbody></table>
+          ${dscrTable(cc, dCls, dscrTxt)}
           <p class="text-[11px] text-ink-400 mt-2">${M.forecast.tot.rimborsi>0?'Quote capitale: rimborsi indicati nei parametri.':`Quote capitale: debiti finanziari esigibili entro 12 mesi da bilancio (${fmtEUR(M.c.debitiFinBreve||0)}). Inserisci i rimborsi effettivi nei parametri per un DSCR più preciso.`}
           Il DSCR prudenziale aggiunge al denominatore i debiti tributari e previdenziali (${fmtEUR(cc.dscrPrud.fiscPrev)}).</p>
         </div>
@@ -2050,11 +2145,12 @@ function buildExportData(){
     contoEconomicoMargineContribuzione: { precedente:ceMdCExport(M.ceRiclass.prev), corrente:ceMdCExport(M.ceRiclass.curr), previsionale:ceMdCExport(M.ceRiclass.fcst) },
     indici,
     scomposizioneROE: M.dupont,
-    rendicontoFinanziario: M.rendiconto,
+    rendicontoFinanziario: { consuntivo:M.rendiconto, previsionale:M.rendicontoF },
     ccii: {
       verdetto:cc.crisiVerdetto, livello:STATUS[cc.crisiLivello].lab, avvisiProspettici:cc.avvisiProspettici,
       patrimonioNetto:num(cc.PN), patrimonioNettoPrevisionale:num(cc.PNf), capitaleSociale:num(cc.capitale), perditeOltreUnTerzo:cc.perditaTerzo,
-      dscr12Mesi:dscrExp(cc.dscrDett), dscr6Mesi:dscrExp(cc.dscr6), dscrPrudenziale:dscrExp(cc.dscrPrud),
+      dscr12Mesi:dscrExp(cc.dscrCalc), dscr6Mesi:dscrExp(cc.dscr6), dscrPrudenziale:dscrExp(cc.dscrPrud),
+      dscrManuale: cc.dscrMan ? { ...dscrExp(cc.dscrMan), lineeDiCredito:num(cc.dscrMan.fidi), debitiScaduti:num(cc.dscrMan.scaduti), valoriInseriti:{ ...DSCR_MAN.v } } : null,
       stressTest: cc.stress.map(s=>({ scenario:s.lab, dscr:num(s.dscr), cassaMinima:num(s.minCash), cassaFinale:num(s.endCash) })),
       indiciSettoriali:{ precedente:settoriali(cc.indiciPrev), corrente:settoriali(cc.indici), previsionale:settoriali(cc.indiciFcst) },
       tutteLeSoglieSuperate:cc.allFive,
@@ -2172,12 +2268,9 @@ function exportExcel(){
     ...Object.values(D.indici).map(x=>[x.area, x.indice, x.unita, x.precedente, x.corrente, x.previsionale, x.esito, x.esitoPrevisionale, x.formula])
   ], [22,32,7,14,14,14,12,16,50]);
 
-  const R=M.rendiconto;
-  add('Rendiconto', [['Voce','Importo'],
-    ['Utile (perdita) d’esercizio',R.utile],['+ Ammortamenti e svalutazioni',R.amm],['+/- Variazione TFR',R.dTfr],['+/- Variazione fondi rischi',R.dFondi],
-    ['= Autofinanziamento',R.flussoReddituale],['- Variazione rimanenze',-R.dRim],['- Variazione crediti',-R.dCred],['+ Variazione debiti',R.dDeb],
-    ['= Variazione CCN',R.variazioneCCN],['= Flusso gestione corrente',R.flussoOperativo],['Investimenti/finanziamenti (residuale)',R.residuo],
-    ['= Variazione disponibilità liquide',R.dLiquidita]], [45,18]);
+  const R=M.rendiconto, RFp=M.rendicontoF;
+  add('Rendiconto', [['Voce', 'Consuntivo '+yc, 'Previsionale'],
+    ...RF_ROWS.map(([k,l,t,sg])=>[l, R.hasPrior||['utile','amm','flussoReddituale'].includes(k) ? num(R[k]*(sg||1)) : null, num(RFp[k]*(sg||1))])], [45,18,18]);
 
   const S=D.ccii.indiciSettoriali, d12=D.ccii.dscr12Mesi;
   add('CCII', [['Verdetto', D.ccii.verdetto], ...D.ccii.avvisiProspettici.map(a=>['Avviso', a]), [],
@@ -2189,6 +2282,9 @@ function exportExcel(){
         ['Quote capitale','quoteCapitale'],['Oneri finanziari','oneriFinanziari'],['Debiti tributari e previdenziali','debitiTributariPrevidenziali'],
         ['= Servizio del debito','servizioDebito'],['DSCR','valore']]
       .map(([l,k])=>[l, d12[k], D.ccii.dscr6Mesi[k], D.ccii.dscrPrudenziale[k]]), [],
+    ...(D.ccii.dscrManuale ? [['DSCR con dati manuali', D.ccii.dscrManuale.valore], ['Linee di credito disponibili', D.ccii.dscrManuale.lineeDiCredito],
+        ['Debiti scaduti da pagare', D.ccii.dscrManuale.debitiScaduti], ['Risorse al servizio del debito', D.ccii.dscrManuale.risorseServizioDebito],
+        ['Servizio del debito', D.ccii.dscrManuale.servizioDebito], []] : []),
     ['Stress test','DSCR','Cassa minima','Cassa finale'], ...D.ccii.stressTest.map(s=>[s.scenario, s.dscr, s.cassaMinima, s.cassaFinale]), [],
     ['Segnale di allerta','Riferimento','Soglia','Da verificare'], ...D.ccii.segnaliAllerta.map(s=>[s.segnale, s.riferimento, s.soglia, s.daVerificare?'SÌ':''])
   ], [42,40,16,16,16,12,12,10]);
@@ -2241,6 +2337,18 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     if(t==='forecast' && MODEL) drawChart(MODEL.forecast);   // ridisegna canvas quando visibile
   });
 });
+
+// DSCR manuale: attivazione, valori, azzeramento (delega sul pannello CCII, che viene ridisegnato)
+const paneCCII = document.querySelector('[data-pane="ccii"]');
+paneCCII.addEventListener('change', e=>{
+  if(e.target.id==='dscrManOn'){ DSCR_MAN.on = e.target.checked; recompute(); return; }
+  const k = e.target.dataset && e.target.dataset.dscr;
+  if(!k) return;
+  const raw = e.target.value.trim();
+  if(raw==='') delete DSCR_MAN.v[k]; else DSCR_MAN.v[k] = +raw;
+  recompute();
+});
+paneCCII.addEventListener('click', e=>{ if(e.target.id==='dscrManReset'){ DSCR_MAN.v = {}; recompute(); } });
 
 // Cambio settore -> ricalcolo indici CCII
 document.getElementById('sectorSel').addEventListener('input', recompute);
