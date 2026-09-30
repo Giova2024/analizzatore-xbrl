@@ -10,6 +10,8 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <!-- Chart.js per il grafico interattivo dei flussi di cassa -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- SheetJS per l'esportazione Excel (.xlsx) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Tipografia: Fraunces (display), Manrope (testo), JetBrains Mono (numeri) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,6 +57,19 @@ if (typeof tailwind !== 'undefined') tailwind.config = {
   .fade-in{ animation: fade .45s ease both; }
   @keyframes fade { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
   .hl { background: linear-gradient(transparent 60%, rgba(56,189,248,.18) 0); }
+
+  /* Stampa / PDF: mostra tutte le sezioni in sequenza, nasconde i controlli */
+  @media print {
+    @page { size: A4; margin: 12mm; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    header, aside, nav, footer, #emptyState, .no-print { display:none !important; }
+    main { grid-column: span 12 / span 12 !important; }
+    .pane { display:block !important; break-before: page; }
+    .pane:first-of-type { break-before: auto; }
+    .pane::before { content: attr(data-title); display:block; font-family:'Fraunces',serif; font-size:20px; color:#38bdf8; margin-bottom:10px; }
+    .card, tr { break-inside: avoid; }
+    .card { backdrop-filter:none; }
+  }
 </style>
 </head>
 
@@ -111,30 +126,16 @@ if (typeof tailwind !== 'undefined') tailwind.config = {
       <p class="text-[10px] text-ink-400 mt-2 leading-snug">Soglie di allerta CNDCEC (doc. 20/10/2019), differenziate per macrosettore ISTAT.</p>
     </div>
 
-    <!-- Parametri forecast -->
+    <!-- Esportazione risultati -->
     <div class="card rounded-2xl p-4">
-      <h2 class="text-xs uppercase tracking-[.2em] text-ink-400 mb-3">3 · Parametri forecast 12 mesi</h2>
-      <div class="space-y-3">
-        <div>
-          <label class="flex justify-between text-[12px] text-ink-300 mb-1"><span>Crescita ricavi annua</span><span class="num text-accent" id="lblGrowth">+3%</span></label>
-          <input id="pGrowth" type="range" min="-30" max="40" value="3" step="1" class="w-full accent-accent">
-        </div>
-        <div>
-          <label class="flex justify-between text-[12px] text-ink-300 mb-1"><span>Variazione costi annua</span><span class="num text-warn" id="lblCost">+2%</span></label>
-          <input id="pCost" type="range" min="-30" max="40" value="2" step="1" class="w-full accent-warn">
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-[12px] text-ink-300 mb-1">Incasso clienti (gg)</label>
-            <input id="pDSO" type="number" min="0" max="360" value="90" class="num w-full bg-navy-800 border border-white/10 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-accent/60">
-          </div>
-          <div>
-            <label class="block text-[12px] text-ink-300 mb-1">Pagam. fornitori (gg)</label>
-            <input id="pDPO" type="number" min="0" max="360" value="75" class="num w-full bg-navy-800 border border-white/10 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-accent/60">
-          </div>
-        </div>
+      <h2 class="text-xs uppercase tracking-[.2em] text-ink-400 mb-3">3 · Esporta risultati</h2>
+      <div class="grid grid-cols-2 gap-2">
+        <button data-export="xlsx" disabled class="export-btn text-[12px] py-2 rounded-lg bg-navy-700 hover:bg-navy-600 transition-colors text-ink-200 disabled:opacity-40 disabled:cursor-not-allowed">⬇ Excel</button>
+        <button data-export="pdf"  disabled class="export-btn text-[12px] py-2 rounded-lg bg-navy-700 hover:bg-navy-600 transition-colors text-ink-200 disabled:opacity-40 disabled:cursor-not-allowed">⎙ PDF / Stampa</button>
+        <button data-export="json" disabled class="export-btn text-[12px] py-2 rounded-lg bg-navy-700 hover:bg-navy-600 transition-colors text-ink-200 disabled:opacity-40 disabled:cursor-not-allowed">{ } JSON</button>
+        <button data-export="md"   disabled class="export-btn text-[12px] py-2 rounded-lg bg-navy-700 hover:bg-navy-600 transition-colors text-ink-200 disabled:opacity-40 disabled:cursor-not-allowed">⬇ Relazione .md</button>
       </div>
-      <p class="text-[10px] text-ink-400 mt-3 leading-snug">I parametri ricalcolano in tempo reale forecast, grafico e DSCR stimato.</p>
+      <p class="text-[10px] text-ink-400 mt-3 leading-snug">Excel: un foglio per sezione (prospetti, indici, rendiconto, CCII, forecast, relazione). JSON: tutti i dati estratti e analizzati.</p>
     </div>
 
     <div class="text-[10px] text-ink-400 leading-snug px-1">
@@ -162,25 +163,28 @@ if (typeof tailwind !== 'undefined') tailwind.config = {
       <!-- TABS -->
       <nav class="flex flex-wrap gap-2 mb-5">
         <button data-tab="dash"      class="tab-btn active px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">① Dashboard &amp; KPI</button>
-        <button data-tab="indici"    class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">② Riclassificazione &amp; Indici</button>
-        <button data-tab="rendi"     class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">③ Rendiconto Finanziario</button>
-        <button data-tab="ccii"      class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">④ Codice della Crisi</button>
-        <button data-tab="forecast"  class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">⑤ Cash Flow Forecast</button>
-        <button data-tab="report"    class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">⑥ Relazione Finale</button>
+        <button data-tab="prospetti" class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">② Stato Patrimoniale &amp; Conto Economico</button>
+        <button data-tab="indici"    class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">③ Riclassificazione &amp; Indici</button>
+        <button data-tab="rendi"     class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">④ Rendiconto Finanziario</button>
+        <button data-tab="ccii"      class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">⑤ Codice della Crisi</button>
+        <button data-tab="forecast"  class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">⑥ Cash Flow Forecast</button>
+        <button data-tab="report"    class="tab-btn px-3.5 py-2 rounded-xl text-[13px] font-semibold border border-white/10 bg-navy-800/60 text-ink-300 transition-all">⑦ Relazione Finale</button>
       </nav>
 
       <!-- PANE: DASHBOARD -->
-      <section data-pane="dash" class="pane fade-in space-y-5"></section>
+      <section data-pane="dash" data-title="Dashboard & KPI" class="pane fade-in space-y-5"></section>
+      <!-- PANE: PROSPETTI DI BILANCIO (come da XBRL) -->
+      <section data-pane="prospetti" data-title="Stato Patrimoniale e Conto Economico" class="pane hidden space-y-5"></section>
       <!-- PANE: INDICI -->
-      <section data-pane="indici" class="pane hidden space-y-5"></section>
+      <section data-pane="indici" data-title="Riclassificazione e Indici" class="pane hidden space-y-5"></section>
       <!-- PANE: RENDICONTO -->
-      <section data-pane="rendi" class="pane hidden space-y-5"></section>
+      <section data-pane="rendi" data-title="Rendiconto Finanziario" class="pane hidden space-y-5"></section>
       <!-- PANE: CCII -->
-      <section data-pane="ccii" class="pane hidden space-y-5"></section>
+      <section data-pane="ccii" data-title="Codice della Crisi" class="pane hidden space-y-5"></section>
       <!-- PANE: FORECAST -->
-      <section data-pane="forecast" class="pane hidden space-y-5"></section>
+      <section data-pane="forecast" data-title="Cash Flow Forecast" class="pane hidden space-y-5"></section>
       <!-- PANE: REPORT -->
-      <section data-pane="report" class="pane hidden space-y-5"></section>
+      <section data-pane="report" data-title="Relazione Finale" class="pane hidden space-y-5"></section>
 
     </div>
   </main>
@@ -328,7 +332,8 @@ function parseXBRL(xmlString){
   for(const el of all){
     if(localName(el) === 'context'){
       const id = el.getAttribute('id');
-      if(id) ctxInfo[id] = { date: contextDate(el), hasDim: contextHasDimensions(el) };
+      if(id) ctxInfo[id] = { date: contextDate(el), hasDim: contextHasDimensions(el),
+                             instant: Array.from(el.getElementsByTagName('*')).some(n=>localName(n)==='instant') };
     }
   }
 
@@ -346,7 +351,8 @@ function parseXBRL(xmlString){
     const info = ctxInfo[ref];
     const rec = { date: info.date, hasDim: info.hasDim, value: v };
     (factIndex[ln] = factIndex[ln] || []).push(rec);
-    flatFacts.push({ name: ln, date: info.date, hasDim: info.hasDim, value: v });
+    flatFacts.push({ name: ln, date: info.date, hasDim: info.hasDim, value: v,
+                     instant: info.instant, hasUnit: el.hasAttribute('unitRef') });
     if(info.date && !info.hasDim) dateTally[info.date] = (dateTally[info.date]||0)+1;
   }
 
@@ -454,9 +460,60 @@ function parseXBRL(xmlString){
     ok:true,
     meta:{ name, dateCurr:dCurr, datePrev:dPrev,
            yearCurr:(dCurr||'').slice(0,4), yearPrev:(dPrev||'').slice(0,4) },
-    current, prior
+    current, prior,
+    prospetti: buildProspetti(flatFacts, dCurr, dPrev)
   };
 }
+
+/*
+  buildProspetti: ricostruisce Stato Patrimoniale e Conto Economico "così come
+  risultano dal file XBRL". Le istanze Infocamere elencano i fatti nell'ordine
+  della tassonomia (schema art. 2424 / 2425 c.c.), quindi si usa l'ordine del
+  documento. Solo fatti monetari (con unitRef) e senza dimensioni:
+   - SP = fatti "instant", Attivo fino a TotaleAttivo, Passivo fino a TotalePassivo
+   - CE = fatti "duration" fino a UtilePerditaEsercizio (esclude rendiconto e nota integrativa)
+*/
+function buildProspetti(flatFacts, dCurr, dPrev){
+  const anyUnit = flatFacts.some(f=>f.hasUnit);
+  const items = new Map();   // name -> {tag, label, instant, curr, prev}  (ordine di inserimento = ordine documento)
+  for(const f of flatFacts){
+    if(f.hasDim || (anyUnit && !f.hasUnit)) continue;
+    if(f.date!==dCurr && f.date!==dPrev) continue;
+    if(/^DatiAnagrafici/.test(f.name)) continue;
+    let it = items.get(f.name);
+    if(!it){ it = { tag:f.name, label:tagLabel(f.name), instant:f.instant, curr:null, prev:null }; items.set(f.name, it); }
+    if(f.date===dCurr && it.curr===null) it.curr = f.value;
+    if(f.date===dPrev && it.prev===null) it.prev = f.value;
+  }
+  const all = Array.from(items.values());
+  const upTo = (arr, tag)=>{ const i = arr.findIndex(x=>x.tag===tag); return i>=0 ? i : -1; };
+
+  const sp = all.filter(x=>x.instant);
+  const iAtt = upTo(sp,'TotaleAttivo');
+  let attivo, passivo;
+  if(iAtt>=0){
+    attivo = sp.slice(0, iAtt+1);
+    const rest = sp.slice(iAtt+1);
+    const iPas = upTo(rest,'TotalePassivo');
+    passivo = iPas>=0 ? rest.slice(0, iPas+1) : rest;
+  } else { attivo = sp; passivo = []; }
+
+  const ce = all.filter(x=>!x.instant);
+  const iUt = upTo(ce,'UtilePerditaEsercizio');
+  const contoEconomico = iUt>=0 ? ce.slice(0, iUt+1) : ce;
+
+  return { attivo, passivo, contoEconomico, completo: iAtt>=0 };
+}
+
+// Etichetta leggibile dal nome del tag: "DebitiVersoBancheEsigibili..." -> "Debiti verso banche esigibili..."
+function tagLabel(name){
+  const words = name.replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g,'$1 $2').split(' ');
+  const out = words.filter((w,i)=> i===0 || w.toLowerCase()!==words[i-1].toLowerCase());
+  return out.map((w,i)=> i===0 ? w : (/^[A-Z]{2,}$/.test(w) ? w : w.toLowerCase())).join(' ')
+            .replace(/\b(dell|all|dall|nell|sull)\s/gi, "$1'");
+}
+// Voci di totale / risultato intermedio (evidenziate nei prospetti)
+const isTotaleTag = t => /^(Totale|Differenza|Risultato|UtilePerdita)/.test(t);
 
 /* ----------------------------------------------------------------------------
    3) UTILITY DI CALCOLO E FORMATTAZIONE
@@ -468,6 +525,7 @@ const fmtNum = (n,d=0) => (n===null||n===undefined||!isFinite(n)) ? '—'
 const fmtPct = (n,d=1) => (n===null||n===undefined||!isFinite(n)) ? '—'
   : new Intl.NumberFormat('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}).format(n)+'%';
 const safeDiv = (a,b)=> (b && isFinite(a/b)) ? a/b : null;
+const fmtSigned = n => (n>0?'+':'')+n;
 
 // Stato -> classi colore
 const STATUS = {
@@ -790,14 +848,11 @@ function buildReport(M){
    ============================================================================ */
 let PARSED=null, MODEL=null, chart=null;
 
+// Ipotesi fisse del forecast a 12 mesi (crescita ricavi %, variazione costi %, giorni incasso/pagamento)
+const FORECAST_IPOTESI = { growth:3, cost:2, dso:90, dpo:75 };
+
 function currentParams(){
-  return {
-    growth: +document.getElementById('pGrowth').value,
-    cost:   +document.getElementById('pCost').value,
-    dso:    +document.getElementById('pDSO').value,
-    dpo:    +document.getElementById('pDPO').value,
-    sector: document.getElementById('sectorSel').value,
-  };
+  return { ...FORECAST_IPOTESI, sector: document.getElementById('sectorSel').value };
 }
 
 function recompute(){
@@ -1041,7 +1096,7 @@ function renderForecast(){
     <div class="card rounded-2xl p-5">
       <div class="flex items-center justify-between mb-3">
         <h3 class="font-display text-lg">Proiezione saldo di cassa · 12 mesi</h3>
-        <span class="text-[11px] text-ink-400">Regola i parametri nella sidebar →</span>
+        <span class="text-[11px] text-ink-400">Ipotesi: ricavi ${fmtSigned(FORECAST_IPOTESI.growth)}%, costi ${fmtSigned(FORECAST_IPOTESI.cost)}%, incasso ${FORECAST_IPOTESI.dso} gg, pagamento ${FORECAST_IPOTESI.dpo} gg</span>
       </div>
       <div style="height:340px"><canvas id="cashChart"></canvas></div>
       ${f.minCash<0?`<p class="text-[12px] text-bad mt-3">⚠ Il saldo proiettato scende sotto zero: prevedere copertura finanziaria o azioni sul capitale circolante (riduzione DSO, aumento DPO, gestione scorte).</p>`:''}
@@ -1104,7 +1159,7 @@ function renderReport(){
   document.querySelector('[data-pane="report"]').innerHTML = `
     <div class="flex items-center justify-between">
       <h3 class="font-display text-xl">Relazione sullo stato di salute aziendale</h3>
-      <button id="dlReport" class="text-[12px] px-3 py-2 rounded-lg bg-accent/15 border border-accent/40 text-accent hover:bg-accent/25 transition-colors">⬇ Scarica .md</button>
+      <button id="dlReport" class="no-print text-[12px] px-3 py-2 rounded-lg bg-accent/15 border border-accent/40 text-accent hover:bg-accent/25 transition-colors">⬇ Scarica .md</button>
     </div>
     <div class="rounded-2xl p-5 bg-gradient-to-br ${oCls} border">
       <h4 class="font-display text-lg ${oTxt} mb-1">Giudizio di sintesi</h4>
@@ -1127,11 +1182,175 @@ function downloadReport(){
   md += `| Current Ratio | ${fmtNum(M.indici.currentRatio.v,2)} |\n| Quick Ratio | ${fmtNum(M.indici.quickRatio.v,2)} |\n`;
   md += `| Leverage | ${fmtNum(M.indici.leverage.v,2)} |\n| DSCR (stima) | ${M.ccii.dscr!==null?fmtNum(M.ccii.dscr,2):'N/D'} |\n`;
   md += `\n*Documento generato automaticamente — strumento di supporto, non sostituisce il giudizio professionale.*\n`;
-  const blob=new Blob([md],{type:'text/markdown'});
+  saveBlob(new Blob([md],{type:'text/markdown'}), 'relazione', 'md');
+}
+
+/* ---- 5.7 PROSPETTI DI BILANCIO (come da XBRL) ---- */
+function renderProspetti(){
+  const PR=PARSED.prospetti, M=MODEL;
+  const yc=M.meta.yearCurr||'t', yp=M.meta.yearPrev||'t-1';
+  const table=(title, rows)=>{
+    const body = rows.length ? rows.map(x=>{
+      const tot=isTotaleTag(x.tag);
+      const delta=(x.curr!==null && x.prev!==null) ? x.curr-x.prev : null;
+      return `<tr class="border-b border-white/5 ${tot?'bg-white/[.03]':''}">
+        <td class="py-1.5 pr-3 ${tot?'font-semibold text-ink-100':'text-ink-300 pl-3'}" title="${x.tag}">${x.label}</td>
+        <td class="py-1.5 text-right num ${tot?'font-semibold text-ink-100':'text-ink-100'} ${x.curr<0?'text-bad':''}">${fmtEUR(x.curr)}</td>
+        <td class="py-1.5 text-right num text-ink-400">${fmtEUR(x.prev)}</td>
+        <td class="py-1.5 text-right num text-[12px] ${delta===null?'text-ink-400':delta>=0?'text-ok':'text-bad'}">${delta===null?'—':(delta>=0?'+':'')+fmtNum(delta)}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="4" class="py-3 text-ink-400 text-[12px]">Nessuna voce trovata nel file.</td></tr>`;
+    return `<div class="card rounded-2xl p-5">
+      <h3 class="font-display text-lg mb-3">${title}</h3>
+      <div class="overflow-x-auto"><table class="w-full text-[13px]">
+        <thead><tr class="text-[11px] uppercase tracking-wider text-ink-400 border-b border-white/10">
+          <th class="text-left font-medium pb-2">Voce</th>
+          <th class="text-right font-medium pb-2">${yc}</th>
+          <th class="text-right font-medium pb-2">${yp}</th>
+          <th class="text-right font-medium pb-2">Variazione</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
+    </div>`;
+  };
+  document.querySelector('[data-pane="prospetti"]').innerHTML = `
+    <p class="text-[12px] text-ink-400">Voci riportate nell’ordine e con i valori presenti nel file XBRL (schemi art. 2424 e 2425 c.c.). Passa il mouse su una voce per vedere il tag XBRL originale.</p>
+    ${!PR.completo?`<p class="text-[12px] text-warn">⚠ Il tag <span class="num">TotaleAttivo</span> non è presente: non è stato possibile separare Attivo e Passivo, tutte le voci patrimoniali sono elencate insieme.</p>`:''}
+    ${table('Stato Patrimoniale · Attivo', PR.attivo)}
+    ${PR.completo?table('Stato Patrimoniale · Passivo', PR.passivo):''}
+    ${table('Conto Economico', PR.contoEconomico)}`;
+}
+
+/* ============================================================================
+   5.8 ESPORTAZIONE RISULTATI (Excel, PDF, JSON, Markdown)
+   ============================================================================ */
+function exportBaseName(){
+  return `${(MODEL.meta.name||'bilancio').replace(/[^a-z0-9]+/gi,'_').toLowerCase()}_${MODEL.meta.yearCurr||''}`;
+}
+function saveBlob(blob, prefix, ext){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=`relazione_${(M.meta.name||'bilancio').replace(/[^a-z0-9]+/gi,'_').toLowerCase()}_${M.meta.yearCurr||''}.md`;
-  a.click(); URL.revokeObjectURL(a.href);
+  a.download=`${prefix}_${exportBaseName()}.${ext}`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+const num = v => (v===null||v===undefined||!isFinite(v)) ? null : Math.round(v*100)/100;
+
+// Oggetto completo dei dati analizzati (usato per JSON ed Excel)
+function buildExportData(){
+  const M=MODEL, PR=PARSED.prospetti;
+  const voci = arr => arr.map(x=>({ tag:x.tag, voce:x.label, corrente:x.curr, precedente:x.prev }));
+  const indici = {};
+  for(const k of ['ROE','ROI','ROS','currentRatio','quickRatio','leverage','coperturaImm']){
+    const o=M.indici[k];
+    indici[k] = { valore:num(o.v), precedente:o.prev!==undefined?num(o.prev):null, formula:o.formula, esito:STATUS[o.status].lab };
+  }
+  return {
+    generatoIl: new Date().toISOString(),
+    applicazione: 'Analizzatore Bilanci XBRL',
+    societa: M.meta.name || null,
+    esercizi: { corrente:{ anno:M.meta.yearCurr, data:M.meta.dateCurr }, precedente:{ anno:M.meta.yearPrev||null, data:M.meta.datePrev } },
+    settoreCCII: M.ccii.settore,
+    ipotesiForecast: FORECAST_IPOTESI,
+    prospetti: { statoPatrimonialeAttivo:voci(PR.attivo), statoPatrimonialePassivo:voci(PR.passivo), contoEconomico:voci(PR.contoEconomico) },
+    datiEstratti: { corrente:M.c, precedente:PARSED.prior },
+    riclassificazione: M.riclass,
+    indici: { ...indici, ebit:M.indici.ebit, ricavi:M.indici.ricavi, utile:M.indici.utile },
+    rendicontoFinanziario: M.rendiconto,
+    ccii: {
+      patrimonioNetto:M.ccii.PN, dscr:num(M.ccii.dscr), servizioDebito:M.ccii.debtService, cashFlow:M.ccii.cashFlowCCII,
+      indiciSettoriali: M.ccii.indici.map(x=>({ indice:x.lab, formula:x.sub, valore:num(x.v), soglia:x.soglia, alertSe:x.dir+' soglia', alert:x.alert })),
+      tutteLeSoglieSuperate:M.ccii.allFive, verdetto:M.ccii.crisiVerdetto, livello:STATUS[M.ccii.crisiLivello].lab
+    },
+    forecast: {
+      cassaIniziale:M.forecast.startCash, cassaFinale:num(M.forecast.endCash), saldoMinimo:num(M.forecast.minCash),
+      meseSaldoMinimo:M.forecast.minMonth, flussoOperativo12m:num(M.forecast.operatingCF12),
+      mesi: M.forecast.labels.map((l,i)=>({ mese:l, incassi:num(M.forecast.incassi[i]), pagamenti:num(M.forecast.pagamenti[i]),
+                                          flussoNetto:num(M.forecast.netCF[i]), saldo:num(M.forecast.balance[i]) }))
+    },
+    relazione: { giudizio:STATUS[M.report.overall].lab, sintesi:M.report.overallTxt,
+                 paragrafi:M.report.paragrafi.map(p=>({ titolo:p.titolo, esito:STATUS[p.livello]?STATUS[p.livello].lab:null, testo:p.testo })) }
+  };
+}
+
+function exportJSON(){
+  saveBlob(new Blob([JSON.stringify(buildExportData(), null, 2)],{type:'application/json'}), 'analisi', 'json');
+}
+
+function exportPDF(){
+  // Tutte le sezioni vengono mostrate dal CSS di stampa: ridimensiona il grafico prima di stampare
+  if(chart) chart.resize(700, 340);
+  window.print();
+}
+window.addEventListener('afterprint', ()=>{ if(chart) chart.resize(); });
+
+function exportExcel(){
+  if(typeof XLSX==='undefined'){ alert('Libreria Excel non disponibile (verifica la connessione). Usa l’esportazione JSON.'); return; }
+  const D=buildExportData(), M=MODEL;
+  const yc=M.meta.yearCurr||'t', yp=M.meta.yearPrev||'t-1';
+  const wb=XLSX.utils.book_new();
+  const add=(name, rows, widths)=>{
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=(widths||[50,18,18,18]).map(w=>({wch:w}));
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  };
+  const vociRows = arr => arr.map(x=>[x.voce, x.corrente, x.precedente, (x.corrente!==null&&x.precedente!==null)?x.corrente-x.precedente:null, x.tag]);
+
+  add('Sintesi', [
+    ['Analizzatore Bilanci XBRL'], [],
+    ['Società', D.societa||''], ['Esercizio', yc], ['Confronto', yp], ['Settore CCII', D.settoreCCII.nome], [],
+    ['Giudizio complessivo', D.relazione.giudizio], ['', D.relazione.sintesi], [],
+    ['KPI','Valore'],
+    ['Ricavi', M.indici.ricavi], ['EBIT', M.indici.ebit], ['Utile d’esercizio', M.indici.utile], ['Patrimonio netto', M.riclass.PN],
+    ['ROE %', D.indici.ROE.valore], ['ROI %', D.indici.ROI.valore], ['ROS %', D.indici.ROS.valore],
+    ['Current ratio', D.indici.currentRatio.valore], ['Quick ratio', D.indici.quickRatio.valore],
+    ['DSCR (stima)', D.ccii.dscr], ['Alert CCII (su 5)', M.ccii.indici.filter(x=>x.alert).length], ['Cassa a 12 mesi', D.forecast.cassaFinale],
+  ], [28,90]);
+
+  const hdr=['Voce', yc, yp, 'Variazione', 'Tag XBRL'];
+  add('Stato Patrimoniale', [
+    ['ATTIVO'], hdr, ...vociRows(D.prospetti.statoPatrimonialeAttivo), [],
+    ['PASSIVO'], hdr, ...vociRows(D.prospetti.statoPatrimonialePassivo)
+  ], [60,18,18,18,50]);
+  add('Conto Economico', [hdr, ...vociRows(D.prospetti.contoEconomico)], [60,18,18,18,50]);
+
+  const r=M.riclass, p=M.p;
+  add('Riclassificato', [
+    ['Voce', yc, yp],
+    ['Immobilizzazioni', r.immob, p.immobilizzazioni??null],
+    ['Rimanenze', r.rim, p.rimanenze??null],
+    ['Liquidità differite', r.liqDiff, (p.creditiAC||0)+(p.attFinNonImmob||0)+(p.rateiAttivi||0)],
+    ['Liquidità immediate', r.liqImm, p.liquidita??null],
+    ['Capitale investito', r.capInvestito, p.totaleAttivo??null],
+    ['Patrimonio netto', r.PN, p.patrimonioNetto??null],
+    ['Passività consolidate', r.passConsol, (p.debitiOltre||0)+(p.tfr||0)+(p.fondiRischi||0)],
+    ['Passività correnti', r.passBreve, (p.debitiBreve||0)+(p.rateiPassivi||0)],
+  ]);
+
+  const nomi={ROE:'ROE %',ROI:'ROI %',ROS:'ROS %',currentRatio:'Current ratio',quickRatio:'Quick ratio',leverage:'Leverage',coperturaImm:'Copertura immobilizzazioni'};
+  add('Indici', [['Indice','Valore','Esercizio prec.','Esito','Formula'],
+    ...Object.keys(nomi).map(k=>[nomi[k], D.indici[k].valore, D.indici[k].precedente, D.indici[k].esito, D.indici[k].formula])], [28,14,16,14,55]);
+
+  const R=M.rendiconto;
+  add('Rendiconto', [['Voce','Importo'],
+    ['Utile (perdita) d’esercizio',R.utile],['+ Ammortamenti e svalutazioni',R.amm],['+/- Variazione TFR',R.dTfr],['+/- Variazione fondi rischi',R.dFondi],
+    ['= Autofinanziamento',R.flussoReddituale],['- Variazione rimanenze',-R.dRim],['- Variazione crediti',-R.dCred],['+ Variazione debiti',R.dDeb],
+    ['= Variazione CCN',R.variazioneCCN],['= Flusso gestione corrente',R.flussoOperativo],['Investimenti/finanziamenti (residuale)',R.residuo],
+    ['= Variazione disponibilità liquide',R.dLiquidita]], [45,18]);
+
+  add('CCII', [['Indice','Formula','Valore %','Soglia %','Alert se','Alert'],
+    ...D.ccii.indiciSettoriali.map(x=>[x.indice,x.formula,x.valore,x.soglia,x.alertSe,x.alert?'SÌ':'NO']), [],
+    ['Patrimonio netto', D.ccii.patrimonioNetto], ['DSCR (stima)', D.ccii.dscr], ['Servizio del debito', D.ccii.servizioDebito],
+    ['Verdetto', D.ccii.verdetto]], [34,38,12,12,14,10]);
+
+  add('Forecast', [['Ipotesi', `Ricavi ${fmtSigned(FORECAST_IPOTESI.growth)}% · Costi ${fmtSigned(FORECAST_IPOTESI.cost)}% · Incasso ${FORECAST_IPOTESI.dso} gg · Pagamento ${FORECAST_IPOTESI.dpo} gg`], [],
+    ['Mese','Incassi','Pagamenti','Flusso netto','Saldo di cassa'],
+    ['Inizio',null,null,null,D.forecast.cassaIniziale],
+    ...D.forecast.mesi.map(m=>[m.mese,m.incassi,m.pagamenti,m.flussoNetto,m.saldo])], [14,16,16,16,16]);
+
+  add('Relazione', [['Paragrafo','Esito','Testo'],
+    ...D.relazione.paragrafi.flatMap(p=>p.testo.map((t,i)=>[i===0?p.titolo:'', i===0?p.esito:'', t]))], [32,14,120]);
+
+  XLSX.writeFile(wb, `analisi_${exportBaseName()}.xlsx`);
 }
 
 /* ---- rendering aggregato ---- */
@@ -1141,7 +1360,8 @@ function renderAll(){
   document.getElementById('companyTag').classList.remove('hidden');
   document.getElementById('companyName').textContent = MODEL.meta.name || 'Bilancio importato';
   document.getElementById('companyYears').textContent = `${MODEL.meta.yearCurr||'t'} vs ${MODEL.meta.yearPrev||'t-1'}`;
-  renderDash(); renderIndici(); renderRendiconto(); renderCCII(); renderForecast(); renderReport();
+  document.querySelectorAll('.export-btn').forEach(b=>b.disabled=false);
+  renderDash(); renderProspetti(); renderIndici(); renderRendiconto(); renderCCII(); renderForecast(); renderReport();
 }
 
 /* ============================================================================
@@ -1167,14 +1387,16 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
   });
 });
 
-// Slider labels
-const gEl=document.getElementById('pGrowth'), cEl=document.getElementById('pCost');
-const updLbl=()=>{ document.getElementById('lblGrowth').textContent=(gEl.value>0?'+':'')+gEl.value+'%';
-                   document.getElementById('lblCost').textContent=(cEl.value>0?'+':'')+cEl.value+'%'; };
-['pGrowth','pCost','pDSO','pDPO','sectorSel'].forEach(id=>{
-  document.getElementById(id).addEventListener('input', ()=>{ updLbl(); recompute(); });
+// Cambio settore -> ricalcolo indici CCII
+document.getElementById('sectorSel').addEventListener('input', recompute);
+
+// Pulsanti di esportazione
+document.querySelectorAll('.export-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    if(!MODEL) return;
+    ({ xlsx:exportExcel, pdf:exportPDF, json:exportJSON, md:downloadReport })[btn.dataset.export]();
+  });
 });
-updLbl();
 
 // Caricamento file
 function handleFile(file){
@@ -1215,75 +1437,76 @@ document.getElementById('demoBtn').addEventListener('click',()=>{
    Due esercizi (2023 corrente / 2022 precedente) con contesti datati.
    ============================================================================ */
 const SAMPLE_XBRL = `<?xml version="1.0" encoding="UTF-8"?>
-<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:itcc-ci="http://www.infocamere.it/itcc/ci">
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:itcc-ci="http://www.infocamere.it/itcc/ci" xmlns:iso4217="http://www.xbrl.org/2003/iso4217">
   <xbrli:context id="C2023"><xbrli:period><xbrli:instant>2023-12-31</xbrli:instant></xbrli:period></xbrli:context>
   <xbrli:context id="C2022"><xbrli:period><xbrli:instant>2022-12-31</xbrli:instant></xbrli:period></xbrli:context>
   <xbrli:context id="D2023"><xbrli:period><xbrli:startDate>2023-01-01</xbrli:startDate><xbrli:endDate>2023-12-31</xbrli:endDate></xbrli:period></xbrli:context>
   <xbrli:context id="D2022"><xbrli:period><xbrli:startDate>2022-01-01</xbrli:startDate><xbrli:endDate>2022-12-31</xbrli:endDate></xbrli:period></xbrli:context>
+  <xbrli:unit id="EUR"><xbrli:measure>iso4217:EUR</xbrli:measure></xbrli:unit>
 
   <itcc-ci:DenominazioneSocieta contextRef="C2023">ALFA MANIFATTURE S.R.L.</itcc-ci:DenominazioneSocieta>
 
   <!-- ATTIVO -->
-  <itcc-ci:TotaleImmobilizzazioni contextRef="C2023">1850000</itcc-ci:TotaleImmobilizzazioni>
-  <itcc-ci:TotaleImmobilizzazioni contextRef="C2022">1700000</itcc-ci:TotaleImmobilizzazioni>
-  <itcc-ci:TotaleRimanenze contextRef="C2023">620000</itcc-ci:TotaleRimanenze>
-  <itcc-ci:TotaleRimanenze contextRef="C2022">540000</itcc-ci:TotaleRimanenze>
-  <itcc-ci:TotaleCrediti contextRef="C2023">880000</itcc-ci:TotaleCrediti>
-  <itcc-ci:TotaleCrediti contextRef="C2022">760000</itcc-ci:TotaleCrediti>
-  <itcc-ci:TotaleDisponibilitaLiquide contextRef="C2023">145000</itcc-ci:TotaleDisponibilitaLiquide>
-  <itcc-ci:TotaleDisponibilitaLiquide contextRef="C2022">210000</itcc-ci:TotaleDisponibilitaLiquide>
-  <itcc-ci:TotaleRateiRiscontiAttivi contextRef="C2023">25000</itcc-ci:TotaleRateiRiscontiAttivi>
-  <itcc-ci:TotaleRateiRiscontiAttivi contextRef="C2022">20000</itcc-ci:TotaleRateiRiscontiAttivi>
-  <itcc-ci:TotaleAttivoCircolante contextRef="C2023">1645000</itcc-ci:TotaleAttivoCircolante>
-  <itcc-ci:TotaleAttivoCircolante contextRef="C2022">1510000</itcc-ci:TotaleAttivoCircolante>
-  <itcc-ci:TotaleAttivo contextRef="C2023">3520000</itcc-ci:TotaleAttivo>
-  <itcc-ci:TotaleAttivo contextRef="C2022">3230000</itcc-ci:TotaleAttivo>
+  <itcc-ci:TotaleImmobilizzazioni contextRef="C2023" unitRef="EUR">1850000</itcc-ci:TotaleImmobilizzazioni>
+  <itcc-ci:TotaleImmobilizzazioni contextRef="C2022" unitRef="EUR">1700000</itcc-ci:TotaleImmobilizzazioni>
+  <itcc-ci:TotaleRimanenze contextRef="C2023" unitRef="EUR">620000</itcc-ci:TotaleRimanenze>
+  <itcc-ci:TotaleRimanenze contextRef="C2022" unitRef="EUR">540000</itcc-ci:TotaleRimanenze>
+  <itcc-ci:TotaleCrediti contextRef="C2023" unitRef="EUR">880000</itcc-ci:TotaleCrediti>
+  <itcc-ci:TotaleCrediti contextRef="C2022" unitRef="EUR">760000</itcc-ci:TotaleCrediti>
+  <itcc-ci:TotaleDisponibilitaLiquide contextRef="C2023" unitRef="EUR">145000</itcc-ci:TotaleDisponibilitaLiquide>
+  <itcc-ci:TotaleDisponibilitaLiquide contextRef="C2022" unitRef="EUR">210000</itcc-ci:TotaleDisponibilitaLiquide>
+  <itcc-ci:TotaleRateiRiscontiAttivi contextRef="C2023" unitRef="EUR">25000</itcc-ci:TotaleRateiRiscontiAttivi>
+  <itcc-ci:TotaleRateiRiscontiAttivi contextRef="C2022" unitRef="EUR">20000</itcc-ci:TotaleRateiRiscontiAttivi>
+  <itcc-ci:TotaleAttivoCircolante contextRef="C2023" unitRef="EUR">1645000</itcc-ci:TotaleAttivoCircolante>
+  <itcc-ci:TotaleAttivoCircolante contextRef="C2022" unitRef="EUR">1510000</itcc-ci:TotaleAttivoCircolante>
+  <itcc-ci:TotaleAttivo contextRef="C2023" unitRef="EUR">3520000</itcc-ci:TotaleAttivo>
+  <itcc-ci:TotaleAttivo contextRef="C2022" unitRef="EUR">3230000</itcc-ci:TotaleAttivo>
 
   <!-- PASSIVO -->
-  <itcc-ci:Capitale contextRef="C2023">300000</itcc-ci:Capitale>
-  <itcc-ci:TotalePatrimonioNetto contextRef="C2023">920000</itcc-ci:TotalePatrimonioNetto>
-  <itcc-ci:TotalePatrimonioNetto contextRef="C2022">860000</itcc-ci:TotalePatrimonioNetto>
-  <itcc-ci:TotaleFondiPerRischiEdOneri contextRef="C2023">60000</itcc-ci:TotaleFondiPerRischiEdOneri>
-  <itcc-ci:TotaleFondiPerRischiEdOneri contextRef="C2022">45000</itcc-ci:TotaleFondiPerRischiEdOneri>
-  <itcc-ci:TrattamentoFineRapportoLavoroSubordinato contextRef="C2023">210000</itcc-ci:TrattamentoFineRapportoLavoroSubordinato>
-  <itcc-ci:TrattamentoFineRapportoLavoroSubordinato contextRef="C2022">185000</itcc-ci:TrattamentoFineRapportoLavoroSubordinato>
-  <itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo contextRef="C2023">540000</itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo>
-  <itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo contextRef="C2022">430000</itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo>
-  <itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo contextRef="C2023">680000</itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo>
-  <itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo contextRef="C2022">760000</itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo>
-  <itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo contextRef="C2023">610000</itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo>
-  <itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo contextRef="C2022">520000</itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo>
-  <itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo contextRef="C2023">95000</itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo>
-  <itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo contextRef="C2022">70000</itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo>
-  <itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo contextRef="C2023">48000</itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo>
-  <itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo contextRef="C2022">35000</itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo>
-  <itcc-ci:TotaleDebitiTributari contextRef="C2023">95000</itcc-ci:TotaleDebitiTributari>
-  <itcc-ci:TotaleDebiti contextRef="C2023">2373000</itcc-ci:TotaleDebiti>
-  <itcc-ci:TotaleDebiti contextRef="C2022">2140000</itcc-ci:TotaleDebiti>
-  <itcc-ci:TotaleRateiRiscontiPassivi contextRef="C2023">57000</itcc-ci:TotaleRateiRiscontiPassivi>
-  <itcc-ci:TotaleRateiRiscontiPassivi contextRef="C2022">0</itcc-ci:TotaleRateiRiscontiPassivi>
-  <itcc-ci:TotalePassivo contextRef="C2023">3520000</itcc-ci:TotalePassivo>
-  <itcc-ci:TotalePassivo contextRef="C2022">3230000</itcc-ci:TotalePassivo>
+  <itcc-ci:Capitale contextRef="C2023" unitRef="EUR">300000</itcc-ci:Capitale>
+  <itcc-ci:TotalePatrimonioNetto contextRef="C2023" unitRef="EUR">920000</itcc-ci:TotalePatrimonioNetto>
+  <itcc-ci:TotalePatrimonioNetto contextRef="C2022" unitRef="EUR">860000</itcc-ci:TotalePatrimonioNetto>
+  <itcc-ci:TotaleFondiPerRischiEdOneri contextRef="C2023" unitRef="EUR">60000</itcc-ci:TotaleFondiPerRischiEdOneri>
+  <itcc-ci:TotaleFondiPerRischiEdOneri contextRef="C2022" unitRef="EUR">45000</itcc-ci:TotaleFondiPerRischiEdOneri>
+  <itcc-ci:TrattamentoFineRapportoLavoroSubordinato contextRef="C2023" unitRef="EUR">210000</itcc-ci:TrattamentoFineRapportoLavoroSubordinato>
+  <itcc-ci:TrattamentoFineRapportoLavoroSubordinato contextRef="C2022" unitRef="EUR">185000</itcc-ci:TrattamentoFineRapportoLavoroSubordinato>
+  <itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo contextRef="C2023" unitRef="EUR">540000</itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo contextRef="C2022" unitRef="EUR">430000</itcc-ci:DebitiVersoBancheEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo contextRef="C2023" unitRef="EUR">680000</itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo contextRef="C2022" unitRef="EUR">760000</itcc-ci:DebitiVersoBancheEsigibiliOltreEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo contextRef="C2023" unitRef="EUR">610000</itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo contextRef="C2022" unitRef="EUR">520000</itcc-ci:DebitiVersoFornitoriEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo contextRef="C2023" unitRef="EUR">95000</itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo contextRef="C2022" unitRef="EUR">70000</itcc-ci:DebitiTributariEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo contextRef="C2023" unitRef="EUR">48000</itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo contextRef="C2022" unitRef="EUR">35000</itcc-ci:DebitiVersoIstitutiDiPrevidenzaEsigibiliEntroEsercizioSuccessivo>
+  <itcc-ci:TotaleDebitiTributari contextRef="C2023" unitRef="EUR">95000</itcc-ci:TotaleDebitiTributari>
+  <itcc-ci:TotaleDebiti contextRef="C2023" unitRef="EUR">2373000</itcc-ci:TotaleDebiti>
+  <itcc-ci:TotaleDebiti contextRef="C2022" unitRef="EUR">2140000</itcc-ci:TotaleDebiti>
+  <itcc-ci:TotaleRateiRiscontiPassivi contextRef="C2023" unitRef="EUR">57000</itcc-ci:TotaleRateiRiscontiPassivi>
+  <itcc-ci:TotaleRateiRiscontiPassivi contextRef="C2022" unitRef="EUR">0</itcc-ci:TotaleRateiRiscontiPassivi>
+  <itcc-ci:TotalePassivo contextRef="C2023" unitRef="EUR">3520000</itcc-ci:TotalePassivo>
+  <itcc-ci:TotalePassivo contextRef="C2022" unitRef="EUR">3230000</itcc-ci:TotalePassivo>
 
   <!-- CONTO ECONOMICO -->
-  <itcc-ci:RicaviVenditePrestazioni contextRef="D2023">4250000</itcc-ci:RicaviVenditePrestazioni>
-  <itcc-ci:RicaviVenditePrestazioni contextRef="D2022">3980000</itcc-ci:RicaviVenditePrestazioni>
-  <itcc-ci:TotaleValoreProduzione contextRef="D2023">4310000</itcc-ci:TotaleValoreProduzione>
-  <itcc-ci:TotaleValoreProduzione contextRef="D2022">4020000</itcc-ci:TotaleValoreProduzione>
-  <itcc-ci:TotaleCostiProduzione contextRef="D2023">4030000</itcc-ci:TotaleCostiProduzione>
-  <itcc-ci:TotaleCostiProduzione contextRef="D2022">3760000</itcc-ci:TotaleCostiProduzione>
-  <itcc-ci:DifferenzaValoreCostiProduzione contextRef="D2023">280000</itcc-ci:DifferenzaValoreCostiProduzione>
-  <itcc-ci:DifferenzaValoreCostiProduzione contextRef="D2022">260000</itcc-ci:DifferenzaValoreCostiProduzione>
-  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2023">240000</itcc-ci:TotaleAmmortamentiSvalutazioni>
-  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2022">220000</itcc-ci:TotaleAmmortamentiSvalutazioni>
-  <itcc-ci:TotaleCostiPerIlPersonale contextRef="D2023">980000</itcc-ci:TotaleCostiPerIlPersonale>
-  <itcc-ci:TotaleInteressiAltriOneriFinanziari contextRef="D2023">96000</itcc-ci:TotaleInteressiAltriOneriFinanziari>
-  <itcc-ci:TotaleInteressiAltriOneriFinanziari contextRef="D2022">82000</itcc-ci:TotaleInteressiAltriOneriFinanziari>
-  <itcc-ci:RisultatoPrimaImposte contextRef="D2023">184000</itcc-ci:RisultatoPrimaImposte>
-  <itcc-ci:RisultatoPrimaImposte contextRef="D2022">178000</itcc-ci:RisultatoPrimaImposte>
-  <itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate contextRef="D2023">58000</itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate>
-  <itcc-ci:UtilePerditaEsercizio contextRef="D2023">126000</itcc-ci:UtilePerditaEsercizio>
-  <itcc-ci:UtilePerditaEsercizio contextRef="D2022">118000</itcc-ci:UtilePerditaEsercizio>
+  <itcc-ci:RicaviVenditePrestazioni contextRef="D2023" unitRef="EUR">4250000</itcc-ci:RicaviVenditePrestazioni>
+  <itcc-ci:RicaviVenditePrestazioni contextRef="D2022" unitRef="EUR">3980000</itcc-ci:RicaviVenditePrestazioni>
+  <itcc-ci:TotaleValoreProduzione contextRef="D2023" unitRef="EUR">4310000</itcc-ci:TotaleValoreProduzione>
+  <itcc-ci:TotaleValoreProduzione contextRef="D2022" unitRef="EUR">4020000</itcc-ci:TotaleValoreProduzione>
+  <itcc-ci:TotaleCostiProduzione contextRef="D2023" unitRef="EUR">4030000</itcc-ci:TotaleCostiProduzione>
+  <itcc-ci:TotaleCostiProduzione contextRef="D2022" unitRef="EUR">3760000</itcc-ci:TotaleCostiProduzione>
+  <itcc-ci:DifferenzaValoreCostiProduzione contextRef="D2023" unitRef="EUR">280000</itcc-ci:DifferenzaValoreCostiProduzione>
+  <itcc-ci:DifferenzaValoreCostiProduzione contextRef="D2022" unitRef="EUR">260000</itcc-ci:DifferenzaValoreCostiProduzione>
+  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2023" unitRef="EUR">240000</itcc-ci:TotaleAmmortamentiSvalutazioni>
+  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2022" unitRef="EUR">220000</itcc-ci:TotaleAmmortamentiSvalutazioni>
+  <itcc-ci:TotaleCostiPerIlPersonale contextRef="D2023" unitRef="EUR">980000</itcc-ci:TotaleCostiPerIlPersonale>
+  <itcc-ci:TotaleInteressiAltriOneriFinanziari contextRef="D2023" unitRef="EUR">96000</itcc-ci:TotaleInteressiAltriOneriFinanziari>
+  <itcc-ci:TotaleInteressiAltriOneriFinanziari contextRef="D2022" unitRef="EUR">82000</itcc-ci:TotaleInteressiAltriOneriFinanziari>
+  <itcc-ci:RisultatoPrimaImposte contextRef="D2023" unitRef="EUR">184000</itcc-ci:RisultatoPrimaImposte>
+  <itcc-ci:RisultatoPrimaImposte contextRef="D2022" unitRef="EUR">178000</itcc-ci:RisultatoPrimaImposte>
+  <itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate contextRef="D2023" unitRef="EUR">58000</itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate>
+  <itcc-ci:UtilePerditaEsercizio contextRef="D2023" unitRef="EUR">126000</itcc-ci:UtilePerditaEsercizio>
+  <itcc-ci:UtilePerditaEsercizio contextRef="D2022" unitRef="EUR">118000</itcc-ci:UtilePerditaEsercizio>
 </xbrli:xbrl>`;
 </script>
 </body>
