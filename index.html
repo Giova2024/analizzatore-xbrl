@@ -57,6 +57,9 @@ if (typeof tailwind !== 'undefined') tailwind.config = {
   .fade-in{ animation: fade .45s ease both; }
   @keyframes fade { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
   .hl { background: linear-gradient(transparent 60%, rgba(56,189,248,.18) 0); }
+  .fc-num, .var-in { background:#0f1a30; border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:4px 8px; font-size:12px; text-align:right; color:#e8eefb; }
+  .fc-num:focus, .var-in:focus { outline:none; border-color:rgba(56,189,248,.6); }
+  details > summary::-webkit-details-marker { display:none; }
 
   /* Stampa / PDF: mostra tutte le sezioni in sequenza, nasconde i controlli */
   @media print {
@@ -66,9 +69,25 @@ if (typeof tailwind !== 'undefined') tailwind.config = {
     main { grid-column: span 12 / span 12 !important; }
     .pane { display:block !important; break-before: page; }
     .pane:first-of-type { break-before: auto; }
-    .pane::before { content: attr(data-title); display:block; font-family:'Fraunces',serif; font-size:20px; color:#38bdf8; margin-bottom:10px; }
+    .pane::before { content: attr(data-title); display:block; font-family:'Fraunces',serif; font-size:20px; color:#0c4a6e; margin-bottom:10px; border-bottom:2px solid #0c4a6e; padding-bottom:4px; }
     .card, tr { break-inside: avoid; }
-    .card { backdrop-filter:none; }
+    .fade-in, .animate-pulse { animation:none !important; opacity:1 !important; transform:none !important; }
+    details:not([open]) > *:not(summary) { display:block !important; }
+    /* Tema chiaro per la carta: sfondo bianco, testo scuro */
+    html, body { background:#fff !important; color:#111827 !important; }
+    .card { background:#fff !important; border:1px solid #d1d5db !important; backdrop-filter:none !important; box-shadow:none !important; }
+    .text-ink-100, .text-ink-200 { color:#111827 !important; }
+    .text-ink-300 { color:#374151 !important; }
+    .text-ink-400 { color:#6b7280 !important; }
+    .text-accent { color:#0369a1 !important; }
+    .text-ok { color:#047857 !important; }
+    .text-warn { color:#b45309 !important; }
+    .text-bad { color:#b91c1c !important; }
+    [class*="border-white"] { border-color:#e5e7eb !important; }
+    [class*="bg-white/"] { background:#f3f4f6 !important; }
+    [class*="bg-navy"] { background:#f3f4f6 !important; }
+    .var-in { background:#fff; color:#111827; border-color:#d1d5db; }
+    .hl { background: linear-gradient(transparent 60%, #fde68a 0); }
   }
 </style>
 </head>
@@ -126,9 +145,83 @@ if (typeof tailwind !== 'undefined') tailwind.config = {
       <p class="text-[10px] text-ink-400 mt-2 leading-snug">Soglie di allerta CNDCEC (doc. 20/10/2019), differenziate per macrosettore ISTAT.</p>
     </div>
 
+    <!-- Parametri flussi di cassa futuri (pannello richiudibile) -->
+    <details id="fcPanel" class="card rounded-2xl p-4 group" open>
+      <summary class="flex items-center justify-between cursor-pointer list-none select-none">
+        <h2 class="text-xs uppercase tracking-[.2em] text-ink-400">3 · Parametri flussi di cassa</h2>
+        <span class="text-ink-400 text-[12px] transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <div class="mt-4 space-y-4 text-[12px]">
+        <!-- Ricavi e incassi -->
+        <fieldset class="space-y-2">
+          <legend class="text-[10px] uppercase tracking-wider text-accent mb-1">Ricavi e incassi</legend>
+          <div>
+            <label class="flex justify-between text-ink-300 mb-1"><span>Crescita ricavi annua</span><span class="num text-accent" data-lbl="growth"></span></label>
+            <input data-fc="growth" type="range" min="-50" max="50" step="1" class="w-full accent-accent">
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-ink-300">Incasso clienti (gg)</label>
+            <input data-fc="dso" type="number" min="0" max="360" class="fc-num num w-24">
+          </div>
+        </fieldset>
+        <!-- Costi e pagamenti -->
+        <fieldset class="space-y-2">
+          <legend class="text-[10px] uppercase tracking-wider text-accent mb-1">Costi e pagamenti</legend>
+          <div>
+            <label class="flex justify-between text-ink-300 mb-1"><span>Var. costi esterni (acquisti, servizi…)</span><span class="num text-warn" data-lbl="costExt"></span></label>
+            <input data-fc="costExt" type="range" min="-50" max="50" step="1" class="w-full accent-warn">
+          </div>
+          <div>
+            <label class="flex justify-between text-ink-300 mb-1"><span>Var. costo del personale</span><span class="num text-warn" data-lbl="costPers"></span></label>
+            <input data-fc="costPers" type="range" min="-50" max="50" step="1" class="w-full accent-warn">
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-ink-300">Pagamento fornitori (gg)</label>
+            <input data-fc="dpo" type="number" min="0" max="360" class="fc-num num w-24">
+          </div>
+          <p class="text-[10px] text-ink-400 leading-snug">Il personale è pagato nel mese; ammortamenti e accantonamenti sono esclusi (non monetari).</p>
+        </fieldset>
+        <!-- Investimenti e finanziamenti -->
+        <fieldset class="space-y-2">
+          <legend class="text-[10px] uppercase tracking-wider text-accent mb-1">Investimenti e finanziamenti</legend>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-ink-300">Investimenti 12m (€)</label>
+            <input data-fc="capex" type="number" min="0" step="1000" class="fc-num num w-28">
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-ink-300">Rimborso quote capitale (€)</label>
+            <input data-fc="rimborsi" type="number" min="0" step="1000" class="fc-num num w-28">
+          </div>
+          <p class="text-[10px] text-ink-400 leading-snug -mt-1" id="fcHintRimb"></p>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-ink-300">Nuovi finanziamenti (€, mese 1)</label>
+            <input data-fc="nuoviFin" type="number" min="0" step="1000" class="fc-num num w-28">
+          </div>
+          <div>
+            <label class="flex justify-between text-ink-300 mb-1"><span>Var. oneri finanziari</span><span class="num text-warn" data-lbl="onFin"></span></label>
+            <input data-fc="onFin" type="range" min="-50" max="100" step="5" class="w-full accent-warn">
+          </div>
+        </fieldset>
+        <!-- Fisco e soglie -->
+        <fieldset class="space-y-2">
+          <legend class="text-[10px] uppercase tracking-wider text-accent mb-1">Imposte e soglia di cassa</legend>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-ink-300">Imposte da versare (€)</label>
+            <input data-fc="imposte" type="number" min="0" step="1000" class="fc-num num w-28" placeholder="da bilancio">
+          </div>
+          <p class="text-[10px] text-ink-400 leading-snug -mt-1">Vuoto = imposte dell’ultimo bilancio. Versate 50% al mese 6 e 50% al mese 11.</p>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-ink-300">Cassa minima di sicurezza (€)</label>
+            <input data-fc="cassaMin" type="number" min="0" step="1000" class="fc-num num w-28">
+          </div>
+        </fieldset>
+        <button id="fcReset" class="w-full text-[12px] py-1.5 rounded-lg bg-navy-700 hover:bg-navy-600 transition-colors text-ink-300">↺ Ripristina valori predefiniti</button>
+      </div>
+    </details>
+
     <!-- Esportazione risultati -->
     <div class="card rounded-2xl p-4">
-      <h2 class="text-xs uppercase tracking-[.2em] text-ink-400 mb-3">3 · Esporta risultati</h2>
+      <h2 class="text-xs uppercase tracking-[.2em] text-ink-400 mb-3">4 · Esporta risultati</h2>
       <div class="grid grid-cols-2 gap-2">
         <button data-export="xlsx" disabled class="export-btn text-[12px] py-2 rounded-lg bg-navy-700 hover:bg-navy-600 transition-colors text-ink-200 disabled:opacity-40 disabled:cursor-not-allowed">⬇ Excel</button>
         <button data-export="pdf"  disabled class="export-btn text-[12px] py-2 rounded-lg bg-navy-700 hover:bg-navy-600 transition-colors text-ink-200 disabled:opacity-40 disabled:cursor-not-allowed">⎙ PDF / Stampa</button>
@@ -266,6 +359,20 @@ const TAGS = {
   risultatoAnteImposte:['RisultatoPrimaImposte','RisultatoPrimaDelleImposte'],
   imposte:             ['TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate','ImposteRedditoEsercizio','TotaleImposteSulRedditoEsercizio'],
   utileEsercizio:      ['UtilePerditaEsercizio','UtilePerditaDellEsercizio'],
+
+  // --- DETTAGLIO CONTO ECONOMICO (per riclassificazioni a valore aggiunto / margine di contribuzione) ---
+  varRimProdotti:      ['VariazioniRimanenzeProdottiCorsoLavorazioneSemilavoratiFiniti','ValoreProduzioneVariazioniRimanenzeProdottiCorsoLavorazioneSemilavoratiFiniti'],
+  varLavoriCorso:      ['VariazioniLavoriCorsoOrdinazione','ValoreProduzioneVariazioniLavoriCorsoOrdinazione'],
+  incrementiImmob:     ['IncrementiImmobilizzazioniLavoriInterni','ValoreProduzioneIncrementiImmobilizzazioniLavoriInterni'],
+  altriRicavi:         ['TotaleAltriRicaviProventi','AltriRicaviProventi','ValoreProduzioneAltriRicaviProventiTotaleAltriRicaviProventi'],
+  materiePrime:        ['MateriePrimeSussidiarieConsumoMerci','CostiProduzioneMateriePrimeSussidiarieConsumoMerci'],
+  servizi:             ['Servizi','CostiPerServizi','CostiProduzioneServizi'],
+  godimentoBeni:       ['GodimentoBeniTerzi','CostiProduzioneGodimentoBeniTerzi'],
+  varRimMaterie:       ['VariazioniRimanenzeMateriePrimeSussidiarieConsumoMerci','CostiProduzioneVariazioniRimanenzeMateriePrimeSussidiarieConsumoMerci'],
+  accRischi:           ['AccantonamentiRischi','AccantonamentiPerRischi','CostiProduzioneAccantonamentiRischi'],
+  altriAccantonamenti: ['AltriAccantonamenti','CostiProduzioneAltriAccantonamenti'],
+  oneriDiversi:        ['OneriDiversiGestione','OneriDiversiDiGestione','CostiProduzioneOneriDiversiGestione'],
+  rettifiche:          ['TotaleRettificheValoreAttivitaPassivitaFinanziarie','TotaleRettificheValoreAttivitaFinanziarie','TotaleDelleRettifiche'],
 };
 
 /* ----------------------------------------------------------------------------
@@ -393,11 +500,41 @@ function parseXBRL(xmlString){
     return found ? s : null;
   }
 
+  // Helper: primo fatto (senza dimensioni) il cui nome soddisfa l'espressione regolare
+  function findRe(re, date, not){
+    let best=null;
+    for(const f of flatFacts){
+      if(f.date!==date || f.hasDim || !re.test(f.name) || (not && not.test(f.name))) continue;
+      if(!best || (/Totale/.test(f.name) && !/Totale/.test(best.name))) best=f;
+    }
+    return best ? best.value : null;
+  }
+
   // 2d) Costruzione oggetto voci per un esercizio
   function buildYear(date){
     if(!date) return null;
     const Y = {};
     for(const key in TAGS) Y[key] = getVal(TAGS[key], date);
+
+    // Fallback per varianti di nome della tassonomia: ricerca per espressione regolare
+    // (a parità, preferisce il tag di "Totale..." rispetto alle sotto-voci)
+    const pick = (key, re, not)=>{ if(Y[key]===null) Y[key] = findRe(re, date, not); };
+    pick('costoPersonale', /TotaleCosti(Per)?(Il)?Personale$/);
+    pick('ammortamenti',   /TotaleAmmortamentiSvalutazioni$/);
+    pick('proventiOneriFin', /TotaleProventiOneriFinanziari$|TotaleProventiEOneriFinanziari$/);
+    pick('varRimProdotti', /VariazioniRimanenzeProdotti/);
+    pick('varLavoriCorso', /VariazioniLavori(In)?CorsoOrdinazione/);
+    pick('incrementiImmob',/IncrementiImmobilizzazioni.*LavoriInterni/);
+    pick('altriRicavi',    /AltriRicavi(E)?Proventi/);
+    pick('materiePrime',   /MateriePrime.*Consumo.*Merci$/, /Variazion|Rimanenz/);
+    pick('servizi',        /^(CostiProduzione)?(CostiPer|Per)?Servizi$/);
+    pick('godimentoBeni',  /GodimentoBeni.*Terzi/);
+    pick('varRimMaterie',  /VariazioniRimanenzeMateriePrime/);
+    pick('accRischi',      /Accantonament[oi](Per)?Rischi$/);
+    pick('altriAccantonamenti', /AltriAccantonamenti$/);
+    pick('oneriDiversi',   /OneriDiversi(Di)?Gestione$/);
+    pick('rettifiche',     /TotaleRettifiche/);
+    Y.accantonamenti = (Y.accRischi||0) + (Y.altriAccantonamenti||0);
 
     // --- Fallback aggraziati su voci mancanti ---
     // Ammortamenti: se manca il totale, somma le componenti note
@@ -623,6 +760,9 @@ function computeModel(parsed, params){
     hasPrior: !!parsed.prior
   };
 
+  /* --- 4.3b CONTO ECONOMICO RICLASSIFICATO (valore aggiunto / margine di contribuzione) --- */
+  M.ceRiclass = { curr: riclassCE(c, params.variab), prev: riclassCE(parsed.prior, params.variab) };
+
   /* --- 4.5 FORECAST 12 MESI (necessario anche per DSCR) --- */
   M.forecast = buildForecast(c, params);
 
@@ -645,10 +785,14 @@ function computeModel(parsed, params){
   const alertTT  = (i_tt !==null) && (i_tt  >= settore.tt);
   const allFive  = alertOF && alertPN && alertLIQ && alertCF && alertTT;
 
-  // DSCR stimato (semplificato) dal forecast: cassa disponibile / servizio del debito
-  const operatingCF12 = M.forecast.operatingCF12;
-  const debtService = (c.debitiFinBreve||0) + (c.oneriFinanziari||0);
-  const dscr = (debtService>0) ? ((c.liquidita||0) + operatingCF12) / debtService : null;
+  // DSCR stimato dal forecast:
+  //   (cassa iniziale + flusso operativo 12m − imposte − investimenti) / (quote capitale + oneri finanziari)
+  //   quote capitale = rimborsi indicati nei parametri, altrimenti debiti finanziari entro 12 mesi da bilancio
+  const F = M.forecast;
+  const quoteCapitale = F.tot.rimborsi>0 ? F.tot.rimborsi : (c.debitiFinBreve||0);
+  const debtService = quoteCapitale + F.tot.oneriFin;
+  const cassaPerDebito = F.startCash + F.operatingCF12 - F.tot.imposte - F.tot.investimenti;
+  const dscr = (debtService>0) ? cassaPerDebito / debtService : null;
 
   // Gerarchia CNDCEC
   let crisiVerdetto, crisiLivello;
@@ -671,7 +815,7 @@ function computeModel(parsed, params){
   }
 
   M.ccii = {
-    settore, attivo, cashFlowCCII, dscr, debtService, PN,
+    settore, attivo, cashFlowCCII, dscr, debtService, quoteCapitale, cassaPerDebito, PN,
     indici:[
       { lab:'Sostenibilità oneri finanziari', sub:'Oneri finanziari / Ricavi', v:i_of, soglia:settore.of, dir:'≥', alert:alertOF, unit:'%' },
       { lab:'Adeguatezza patrimoniale',       sub:'Patrimonio netto / Debiti totali', v:i_pn, soglia:settore.pn, dir:'≤', alert:alertPN, unit:'%' },
@@ -691,22 +835,31 @@ function computeModel(parsed, params){
    4.5b FORECAST — modello mensile a 12 mesi con sfasamento incassi/pagamenti
 ---------------------------------------------------------------------------- */
 function buildForecast(c, params){
-  const g   = (params.growth||0)/100;   // crescita ricavi annua
-  const kc  = (params.cost||0)/100;     // variazione costi annua
-  const dso = Math.max(0, params.dso||0);   // giorni medi di incasso clienti
-  const dpo = Math.max(0, params.dpo||0);   // giorni medi di pagamento fornitori
+  const g   = (params.growth||0)/100;     // crescita ricavi annua
+  const ke  = (params.costExt||0)/100;    // variazione costi esterni (acquisti, servizi, godimento beni, oneri diversi)
+  const kp  = (params.costPers||0)/100;   // variazione costo del personale
+  const kf  = (params.onFin||0)/100;      // variazione oneri finanziari
+  const dso = Math.max(0, params.dso||0); // giorni medi di incasso clienti
+  const dpo = Math.max(0, params.dpo||0); // giorni medi di pagamento fornitori
 
-  const finMonthly = (c.oneriFinanziari||0)/12;       // oneri finanziari spalmati sui 12 mesi
-  const startCash  = c.liquidita || 0;                // cassa iniziale = liquidità immediata di bilancio
+  const startCash  = c.liquidita || 0;    // cassa iniziale = liquidità immediata di bilancio
+  const finMonthly = (c.oneriFinanziari||0) * (1+kf) / 12;
+  const imposteAnno = (params.imposte!==null && params.imposte!==undefined) ? params.imposte : Math.max(0, c.imposte||0);
+  const capexM = Math.max(0, params.capex||0)/12;
+  const rimbM  = Math.max(0, params.rimborsi||0)/12;
+  const nuoviFin = Math.max(0, params.nuoviFin||0);
 
   // Ricavi e costi MONETARI di competenza, mensilizzati con ramp lineare della variazione annua.
-  // (gli ammortamenti sono esclusi dai costi perché non generano uscite di cassa)
+  // Ammortamenti e accantonamenti sono esclusi (non generano uscite di cassa).
+  const pers = c.costoPersonale || 0;
   const baseRev  = (c.ricavi||0)/12;
-  const baseCost = ((c.costiProduzione||0) - (c.ammortamenti||0))/12;
-  const salesAccr=[], costAccr=[];
+  const baseExt  = Math.max(0, (c.costiProduzione||0) - (c.ammortamenti||0) - (c.accantonamenti||0) - pers)/12;
+  const basePers = pers/12;
+  const salesAccr=[], extAccr=[], persPay=[];
   for(let m=1;m<=12;m++){
     salesAccr.push( baseRev  * (1 + g  * (m/12)) );
-    costAccr.push(  baseCost * (1 + kc * (m/12)) );
+    extAccr.push(   baseExt  * (1 + ke * (m/12)) );
+    persPay.push(   basePers * (1 + kp * (m/12)) );   // stipendi e contributi pagati nel mese
   }
 
   // Capitale circolante di APERTURA (saldi del bilancio):
@@ -742,24 +895,86 @@ function buildForecast(c, params){
   const incOpen = releaseOpening(openRecv, lagInc);
   const incNew  = lagFlow(salesAccr, lagInc);
   const payOpen = releaseOpening(openPay,  lagPay);
-  const payNew  = lagFlow(costAccr,  lagPay);
+  const payNew  = lagFlow(extAccr,  lagPay);
 
-  const labels=[], balance=[], netCF=[], incassi=[], pagamenti=[];
-  let cash = startCash; let opCF12 = 0;
-  const MESI = ['Mese 1','Mese 2','Mese 3','Mese 4','Mese 5','Mese 6','Mese 7','Mese 8','Mese 9','Mese 10','Mese 11','Mese 12'];
+  const S = { incassi:[], pagFornitori:[], pagPersonale:[], operativo:[], oneriFin:[], imposte:[],
+              investimenti:[], rimborsi:[], finanziamenti:[], netCF:[], balance:[] };
+  const labels=[];
+  let cash = startCash;
   for(let m=1;m<=12;m++){
-    const inc = incOpen[m-1] + incNew[m-1];   // incassi del mese (stock di apertura + nuove vendite incassate)
-    const pay = payOpen[m-1] + payNew[m-1];    // pagamenti del mese (fornitori di apertura + nuovi costi)
-    const op  = inc - pay;                     // flusso di cassa operativo (ante oneri finanziari)
-    const net = op - finMonthly;               // flusso netto di periodo
-    opCF12 += op;
+    const inc = incOpen[m-1] + incNew[m-1];   // incassi (crediti di apertura + nuove vendite incassate)
+    const pf  = payOpen[m-1] + payNew[m-1];   // pagamenti fornitori (debiti di apertura + nuovi costi esterni)
+    const pp  = persPay[m-1];
+    const op  = inc - pf - pp;                // flusso di cassa operativo
+    const tax = (m===6 || m===11) ? imposteAnno/2 : 0;   // saldo/1° acconto e 2° acconto
+    const fin = m===1 ? nuoviFin : 0;
+    const net = op - finMonthly - tax - capexM - rimbM + fin;
     cash += net;
-    labels.push(MESI[m-1]); incassi.push(inc); pagamenti.push(pay);
-    netCF.push(net); balance.push(cash);
+    labels.push('Mese '+m);
+    S.incassi.push(inc); S.pagFornitori.push(pf); S.pagPersonale.push(pp); S.operativo.push(op);
+    S.oneriFin.push(finMonthly); S.imposte.push(tax); S.investimenti.push(capexM); S.rimborsi.push(rimbM);
+    S.finanziamenti.push(fin); S.netCF.push(net); S.balance.push(cash);
   }
-  return { labels, balance, netCF, incassi, pagamenti, startCash,
-           endCash:cash, operatingCF12:opCF12, minCash:Math.min(...balance),
-           minMonth: balance.indexOf(Math.min(...balance))+1 };
+  const sum = a => a.reduce((x,y)=>x+y,0);
+  const tot = {}; for(const k in S) if(k!=='balance') tot[k]=sum(S[k]);
+  const minCash = Math.min(...S.balance);
+  const cassaMin = Math.max(0, params.cassaMin||0);
+  return { labels, ...S, pagamenti: S.pagFornitori.map((v,i)=>v+S.pagPersonale[i]), tot,
+           startCash, endCash:cash, operatingCF12:tot.operativo, minCash,
+           minMonth: S.balance.indexOf(minCash)+1, cassaMin,
+           mesiSottoSoglia: S.balance.filter(v=>v<cassaMin).length, imposteAnno };
+}
+
+/* ----------------------------------------------------------------------------
+   4.5c CONTO ECONOMICO RICLASSIFICATO
+   - a VALORE AGGIUNTO: VP − costi esterni = VA − personale = MOL − amm./acc. = EBIT ...
+   - a MARGINE DI CONTRIBUZIONE: VP − costi variabili = MdC − costi fissi = EBIT
+   I costi esterni sono calcolati per differenza dal totale B (robusto anche senza dettaglio);
+   la quota non dettagliata nel file compare come "altri costi esterni".
+---------------------------------------------------------------------------- */
+// % di variabilità predefinite per ciascuna categoria di costo (modificabili nella scheda)
+const VARIAB_DEFAULT = { materie:100, servizi:50, godimento:0, oneriDiversi:0, altriEsterni:60, personale:20 };
+
+function riclassCE(Y, variab){
+  if(!Y) return null;
+  const n = x => x || 0;
+  const VP = (Y.valoreProduzione!==null) ? Y.valoreProduzione
+           : n(Y.ricavi)+n(Y.varRimProdotti)+n(Y.varLavoriCorso)+n(Y.incrementiImmob)+n(Y.altriRicavi);
+  const pers=n(Y.costoPersonale), amm=n(Y.ammortamenti), acc=n(Y.accantonamenti);
+  const det = { materie: n(Y.materiePrime)+n(Y.varRimMaterie), servizi:n(Y.servizi),
+                godimento:n(Y.godimentoBeni), oneriDiversi:n(Y.oneriDiversi) };
+  const sumDet = det.materie+det.servizi+det.godimento+det.oneriDiversi;
+  const costiProd = (Y.costiProduzione!==null) ? Y.costiProduzione : sumDet+pers+amm+acc;
+  const costiEsterni = costiProd - pers - amm - acc;
+  det.altriEsterni = costiEsterni - sumDet;             // costi esterni non dettagliati nel file
+  const VA  = VP - costiEsterni;
+  const MOL = VA - pers;
+  const EBIT = MOL - amm - acc;
+  const gestFin = (Y.proventiOneriFin!==null) ? Y.proventiOneriFin : n(Y.proventiFinanziari) - n(Y.oneriFinanziari);
+  const rett = n(Y.rettifiche);
+  const ante = (Y.risultatoAnteImposte!==null) ? Y.risultatoAnteImposte : EBIT+gestFin+rett;
+  const altreComp = ante - (EBIT+gestFin+rett);         // quadratura (componenti non classificate)
+  const imposte = (Y.imposte!==null) ? Y.imposte : (Y.utileEsercizio!==null ? ante - Y.utileEsercizio : 0);
+  const utile = (Y.utileEsercizio!==null) ? Y.utileEsercizio : ante - imposte;
+
+  // Margine di contribuzione
+  const v = Object.assign({}, VARIAB_DEFAULT, variab||{});
+  const pct = k => Math.min(100, Math.max(0, +v[k]||0))/100;
+  const cv = { materie:det.materie*pct('materie'), servizi:det.servizi*pct('servizi'), godimento:det.godimento*pct('godimento'),
+               oneriDiversi:det.oneriDiversi*pct('oneriDiversi'), altriEsterni:det.altriEsterni*pct('altriEsterni'),
+               personale:pers*pct('personale') };
+  const CV = Object.values(cv).reduce((a,b)=>a+b,0);
+  const MdC = VP - CV;
+  const CFissiMonetari = costiEsterni + pers - CV;
+  const CF = CFissiMonetari + amm + acc;
+  const mdcPct = VP ? MdC/VP : null;
+  const BEP = (mdcPct && mdcPct>0) ? CF/mdcPct : null;
+  const margineSicurezza = (BEP!==null && VP) ? (VP-BEP)/VP*100 : null;
+  const levaOperativa = EBIT ? MdC/EBIT : null;
+
+  return { VP, costiEsterni, det, VA, pers, MOL, amm, acc, EBIT, gestFin, rett, altreComp, ante, imposte, utile,
+           cv, CV, MdC, CFissiMonetari, CF, mdcPct: mdcPct!==null?mdcPct*100:null, BEP, margineSicurezza, levaOperativa,
+           dettaglioPresente: sumDet!==0 };
 }
 
 /* ----------------------------------------------------------------------------
@@ -811,6 +1026,13 @@ function buildReport(M){
       ? 'Il ROE supera il ROI: l’effetto leva finanziaria è favorevole (il debito “rende” più di quanto costa).'
       : 'Il ROE non supera il ROI: la leva finanziaria non sta amplificando positivamente la redditività dei mezzi propri.');
   }
+  const ce=M.ceRiclass.curr;
+  if(ce && ce.VP){
+    red.push(`Il valore aggiunto è pari a ${fmtEUR(ce.VA)} (${fmtPct(ce.VA/ce.VP*100)} del valore della produzione) e il MOL a ${fmtEUR(ce.MOL)} (${fmtPct(ce.MOL/ce.VP*100)}).`);
+    if(ce.BEP!==null) red.push(ce.margineSicurezza>=0
+      ? `Con un margine di contribuzione del ${fmtPct(ce.mdcPct)}, il punto di pareggio è stimato in ${fmtEUR(ce.BEP)}: i ricavi potrebbero ridursi del ${fmtPct(ce.margineSicurezza)} prima di generare una perdita operativa (ipotesi di variabilità dei costi stimate).`
+      : `⚠ Il valore della produzione è inferiore al punto di pareggio stimato (${fmtEUR(ce.BEP)}): la struttura dei costi fissi non è coperta dal margine di contribuzione (${fmtPct(ce.mdcPct)}).`);
+  }
   P.push({ titolo:'Redditività', livello: i.ROI.status, testo:red });
 
   // Rischio crisi
@@ -826,7 +1048,12 @@ function buildReport(M){
   cash.push(`Partendo da una liquidità iniziale di ${fmtEUR(f.startCash)}, il forecast a 12 mesi proietta un saldo finale di ${fmtEUR(f.endCash)}.`);
   if(f.minCash<0) cash.push(`⚠ Il saldo di cassa diventa NEGATIVO (minimo ${fmtEUR(f.minCash)} al mese ${f.minMonth}): è probabile una tensione di tesoreria da coprire con linee di credito o interventi sul circolante.`);
   else cash.push(`Il saldo di cassa resta positivo per l’intero orizzonte (minimo ${fmtEUR(f.minCash)} al mese ${f.minMonth}).`);
-  P.push({ titolo:'Prospettiva di cassa (12 mesi)', livello: f.minCash<0?'bad':(f.endCash<f.startCash?'warn':'ok'), testo:cash });
+  if(f.minCash>=0 && f.cassaMin>0 && f.mesiSottoSoglia>0)
+    cash.push(`Per ${f.mesiSottoSoglia} ${f.mesiSottoSoglia===1?'mese':'mesi'} il saldo resta sotto la cassa minima di sicurezza indicata (${fmtEUR(f.cassaMin)}).`);
+  cash.push(`Il flusso operativo dei 12 mesi (${fmtEUR(f.operatingCF12)}) deve coprire oneri finanziari per ${fmtEUR(f.tot.oneriFin)}, imposte per ${fmtEUR(f.tot.imposte)}`+
+            `${f.tot.investimenti?`, investimenti per ${fmtEUR(f.tot.investimenti)}`:''}${f.tot.rimborsi?` e rimborsi di finanziamenti per ${fmtEUR(f.tot.rimborsi)}`:''}.`);
+  const warnCash = f.endCash<f.startCash || (f.cassaMin>0 && f.mesiSottoSoglia>0);
+  P.push({ titolo:'Prospettiva di cassa (12 mesi)', livello: f.minCash<0?'bad':(warnCash?'warn':'ok'), testo:cash });
 
   // Giudizio sintetico complessivo (calcolato sui 5 paragrafi precedenti)
   const livelli = P.map(x=>x.livello);
@@ -848,11 +1075,43 @@ function buildReport(M){
    ============================================================================ */
 let PARSED=null, MODEL=null, chart=null;
 
-// Ipotesi fisse del forecast a 12 mesi (crescita ricavi %, variazione costi %, giorni incasso/pagamento)
-const FORECAST_IPOTESI = { growth:3, cost:2, dso:90, dpo:75 };
+// Parametri predefiniti del forecast a 12 mesi (imposte null = valore dell'ultimo bilancio)
+const FC_DEFAULT = { growth:3, dso:90, costExt:2, costPers:2, dpo:75, capex:0, rimborsi:0, nuoviFin:0, onFin:0, imposte:null, cassaMin:0 };
+const FC_PERCENT = ['growth','costExt','costPers','onFin'];
+let VARIAB = { ...VARIAB_DEFAULT };      // % di variabilità dei costi (CE a margine di contribuzione)
+let VARIAB_OPEN = false;                 // stato del pannello ipotesi di variabilità
+
+function readForecastParams(){
+  const P = {};
+  document.querySelectorAll('[data-fc]').forEach(el=>{
+    const k = el.dataset.fc, raw = el.value.trim();
+    P[k] = (raw==='') ? (k==='imposte' ? null : FC_DEFAULT[k]) : +raw;
+  });
+  return P;
+}
+function writeForecastParams(P){
+  document.querySelectorAll('[data-fc]').forEach(el=>{
+    const v = P[el.dataset.fc];
+    el.value = (v===null || v===undefined) ? '' : v;
+  });
+  updFcLabels();
+}
+function updFcLabels(){
+  FC_PERCENT.forEach(k=>{
+    const el = document.querySelector(`[data-fc="${k}"]`), lb = document.querySelector(`[data-lbl="${k}"]`);
+    if(el && lb) lb.textContent = fmtSigned(+el.value)+'%';
+  });
+}
+// Descrizione testuale delle ipotesi (forecast pane, Excel, relazione)
+function descrIpotesi(P){
+  return `Ricavi ${fmtSigned(P.growth)}% · Costi esterni ${fmtSigned(P.costExt)}% · Personale ${fmtSigned(P.costPers)}% · `+
+         `Incasso ${P.dso} gg · Pagamento ${P.dpo} gg · Oneri fin. ${fmtSigned(P.onFin)}% · Investimenti ${fmtEUR(P.capex)} · `+
+         `Rimborsi ${fmtEUR(P.rimborsi)} · Nuovi finanziamenti ${fmtEUR(P.nuoviFin)} · Imposte ${P.imposte===null?'da bilancio':fmtEUR(P.imposte)} · `+
+         `Cassa minima ${fmtEUR(P.cassaMin)}`;
+}
 
 function currentParams(){
-  return { ...FORECAST_IPOTESI, sector: document.getElementById('sectorSel').value };
+  return { ...readForecastParams(), variab:{ ...VARIAB }, sector: document.getElementById('sectorSel').value };
 }
 
 function recompute(){
@@ -975,6 +1234,8 @@ function renderIndici(){
 
   document.querySelector('[data-pane="indici"]').innerHTML = `
     ${recl}
+    ${renderCEValoreAggiunto()}
+    ${renderCEMargineContribuzione()}
     <h3 class="font-display text-lg mt-2">Indici economico-finanziari</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       ${indexCard('ROE', i.ROE, v=>fmtPct(v))}
@@ -985,6 +1246,100 @@ function renderIndici(){
       ${indexCard('Leverage (Indebitamento)', i.leverage, v=>fmtNum(v,2))}
       ${indexCard('Copertura immobilizzazioni', i.coperturaImm, v=>fmtNum(v,2))}
     </div>`;
+}
+
+/* ---- 5.2b CONTO ECONOMICO RICLASSIFICATO ---- */
+// Riga di tabella CE: tipo 'sub' = margine intermedio (evidenziato), 'det' = dettaglio rientrato
+function ceRow(label, vc, vp, VPc, type=''){
+  const pct = (VPc && vc!==null && vc!==undefined) ? fmtPct(vc/VPc*100) : '—';
+  const cls = type==='sub' ? 'bg-white/[.03] font-semibold text-ink-100' : (type==='det' ? 'text-ink-400 text-[12px]' : 'text-ink-300');
+  return `<tr class="border-b border-white/5 ${cls}">
+    <td class="py-1.5 ${type==='det'?'pl-5':''}">${label}</td>
+    <td class="py-1.5 text-right num ${type==='sub'&&vc<0?'text-bad':''}">${fmtEUR(vc)}</td>
+    <td class="py-1.5 text-right num text-ink-400">${vp===undefined?'':fmtEUR(vp)}</td>
+    <td class="py-1.5 text-right num text-ink-400 text-[12px]">${pct}</td></tr>`;
+}
+function ceTable(title, sub, rows, extra=''){
+  const M=MODEL;
+  return `<div class="card rounded-2xl p-5">
+    <h3 class="font-display text-lg mb-1">${title}</h3>
+    <p class="text-[12px] text-ink-400 mb-3">${sub}</p>
+    <div class="overflow-x-auto"><table class="w-full text-[13px]">
+      <thead><tr class="text-[11px] uppercase tracking-wider text-ink-400 border-b border-white/10">
+        <th class="text-left font-medium pb-2">Voce</th>
+        <th class="text-right font-medium pb-2">${M.meta.yearCurr||'t'}</th>
+        <th class="text-right font-medium pb-2">${M.meta.yearPrev||'t-1'}</th>
+        <th class="text-right font-medium pb-2">% su VP</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>${extra}
+  </div>`;
+}
+function renderCEValoreAggiunto(){
+  const a=MODEL.ceRiclass.curr, b=MODEL.ceRiclass.prev||{}, V=a.VP;
+  const d=(k)=> (b.det||{})[k];
+  const rows = [
+    ceRow('Valore della produzione (A)', a.VP, b.VP, V, 'sub'),
+    ceRow('− Costi esterni', -a.costiEsterni, b.costiEsterni!==undefined?-b.costiEsterni:undefined, V),
+    ...(a.dettaglioPresente ? [
+      ceRow('materie prime, sussidiarie, merci (± var. rimanenze)', -a.det.materie, d('materie')!==undefined?-d('materie'):undefined, V, 'det'),
+      ceRow('servizi', -a.det.servizi, d('servizi')!==undefined?-d('servizi'):undefined, V, 'det'),
+      ceRow('godimento beni di terzi', -a.det.godimento, d('godimento')!==undefined?-d('godimento'):undefined, V, 'det'),
+      ceRow('oneri diversi di gestione', -a.det.oneriDiversi, d('oneriDiversi')!==undefined?-d('oneriDiversi'):undefined, V, 'det'),
+      ...(Math.abs(a.det.altriEsterni)>1 ? [ceRow('altri costi esterni non dettagliati', -a.det.altriEsterni, d('altriEsterni')!==undefined?-d('altriEsterni'):undefined, V, 'det')] : [])
+    ] : []),
+    ceRow('= VALORE AGGIUNTO', a.VA, b.VA, V, 'sub'),
+    ceRow('− Costo del personale', -a.pers, b.pers!==undefined?-b.pers:undefined, V),
+    ceRow('= MARGINE OPERATIVO LORDO (EBITDA)', a.MOL, b.MOL, V, 'sub'),
+    ceRow('− Ammortamenti e svalutazioni', -a.amm, b.amm!==undefined?-b.amm:undefined, V),
+    ceRow('− Accantonamenti', -a.acc, b.acc!==undefined?-b.acc:undefined, V),
+    ceRow('= REDDITO OPERATIVO (EBIT)', a.EBIT, b.EBIT, V, 'sub'),
+    ceRow('± Proventi e oneri finanziari', a.gestFin, b.gestFin, V),
+    ceRow('± Rettifiche di valore di attività finanziarie', a.rett, b.rett, V),
+    ...(Math.abs(a.altreComp)>1 || Math.abs(b.altreComp||0)>1 ? [ceRow('± Altre componenti (quadratura)', a.altreComp, b.altreComp, V)] : []),
+    ceRow('= RISULTATO ANTE IMPOSTE', a.ante, b.ante, V, 'sub'),
+    ceRow('− Imposte sul reddito', -a.imposte, b.imposte!==undefined?-b.imposte:undefined, V),
+    ceRow('= UTILE (PERDITA) D’ESERCIZIO', a.utile, b.utile, V, 'sub'),
+  ].join('');
+  const note = !a.dettaglioPresente ? `<p class="text-[11px] text-warn mt-3">⚠ Il file non contiene il dettaglio dei costi della produzione (B6–B14): i costi esterni sono calcolati per differenza dal totale B.</p>` : '';
+  return ceTable('Conto Economico riclassificato a valore aggiunto', 'Evidenzia la ricchezza creata dall’impresa (VA) e la sua distribuzione: personale, ammortamenti, finanziatori, Stato, soci.', rows, note);
+}
+function renderCEMargineContribuzione(){
+  const a=MODEL.ceRiclass.curr, b=MODEL.ceRiclass.prev||{}, V=a.VP;
+  const neg = x => x===undefined ? undefined : -x;
+  const cvLabel = { materie:'Materie prime e merci', servizi:'Servizi', godimento:'Godimento beni di terzi',
+                    oneriDiversi:'Oneri diversi di gestione', altriEsterni:'Altri costi esterni (non dettagliati)', personale:'Costo del personale' };
+  const keys = Object.keys(cvLabel).filter(k=> k==='personale' || Math.abs(k==='altriEsterni'?a.det.altriEsterni:a.det[k])>1);
+  const rows = [
+    ceRow('Valore della produzione (A)', a.VP, b.VP, V, 'sub'),
+    ceRow('− Costi variabili', -a.CV, neg(b.CV), V),
+    ...keys.map(k=>ceRow(`${cvLabel[k]} (${VARIAB[k]}% variabile)`, -a.cv[k], b.cv?-b.cv[k]:undefined, V, 'det')),
+    ceRow('= MARGINE DI CONTRIBUZIONE', a.MdC, b.MdC, V, 'sub'),
+    ceRow('− Costi fissi monetari', -a.CFissiMonetari, neg(b.CFissiMonetari), V),
+    ceRow('− Ammortamenti, svalutazioni e accantonamenti', -(a.amm+a.acc), b.amm!==undefined?-(b.amm+b.acc):undefined, V),
+    ceRow('= REDDITO OPERATIVO (EBIT)', a.EBIT, b.EBIT, V, 'sub'),
+  ].join('');
+  const kpi = (lab,val,sub)=>`<div class="rounded-xl bg-white/[.03] border border-white/10 p-3">
+      <p class="text-[10px] uppercase tracking-wider text-ink-400">${lab}</p>
+      <p class="num text-lg font-bold text-ink-100 mt-0.5">${val}</p><p class="text-[10px] text-ink-400">${sub}</p></div>`;
+  const inputs = keys.map(k=>`<label class="flex items-center justify-between gap-2 text-[12px] text-ink-300">
+      <span>${cvLabel[k]}</span>
+      <span class="flex items-center gap-1"><input class="var-in num w-16" type="number" min="0" max="100" step="5" data-var="${k}" value="${VARIAB[k]}">%</span></label>`).join('');
+  const extra = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+      ${kpi('MdC %', fmtPct(a.mdcPct), 'Margine di contribuzione / VP')}
+      ${kpi('Punto di pareggio', a.BEP!==null?fmtEUR(a.BEP):'N/D', 'Fatturato di break-even')}
+      ${kpi('Margine di sicurezza', fmtPct(a.margineSicurezza), 'Calo max dei ricavi prima della perdita')}
+      ${kpi('Leva operativa', a.levaOperativa!==null?fmtNum(a.levaOperativa,2):'N/D', 'MdC / EBIT')}
+    </div>
+    <details id="variabPanel" class="no-print mt-4 rounded-xl border border-white/10 p-3" ${VARIAB_OPEN?'open':''}>
+      <summary class="cursor-pointer text-[12px] text-accent select-none">⚙ Ipotesi di variabilità dei costi (modificabili)</summary>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 mt-3">${inputs}</div>
+      <div class="flex items-center justify-between mt-3">
+        <p class="text-[10px] text-ink-400">Quota di ciascun costo che varia con i volumi. Il resto è considerato fisso.</p>
+        <button id="variabReset" class="text-[11px] px-2 py-1 rounded bg-navy-700 hover:bg-navy-600 text-ink-300">↺ Ripristina</button>
+      </div>
+    </details>`;
+  return ceTable('Conto Economico riclassificato a margine di contribuzione', 'Separa i costi variabili (che seguono i volumi) da quelli fissi: misura il punto di pareggio e la rischiosità operativa.', rows, extra);
 }
 
 /* ---- 5.3 RENDICONTO FINANZIARIO ---- */
@@ -1059,7 +1414,7 @@ function renderCCII(){
       <div class="card rounded-2xl p-4">
         <p class="text-[11px] uppercase tracking-wider text-ink-400">2 · DSCR (stima 12m)</p>
         <p class="num text-2xl font-bold mt-1 ${cc.dscr===null?'text-ink-400':cc.dscr>=1?'text-ok':'text-bad'}">${cc.dscr!==null?fmtNum(cc.dscr,2):'N/D'}</p>
-        <p class="text-[12px] text-ink-300 mt-1">Cassa + flussi operativi 12m / servizio del debito (${fmtEUR(cc.debtService)}).</p>
+        <p class="text-[12px] text-ink-300 mt-1">(Cassa + flusso operativo 12m − imposte − investimenti = ${fmtEUR(cc.cassaPerDebito)}) / servizio del debito (${fmtEUR(cc.debtService)}).</p>
       </div>
       <div class="card rounded-2xl p-4">
         <p class="text-[11px] uppercase tracking-wider text-ink-400">3 · Indici settoriali</p>
@@ -1085,56 +1440,99 @@ function renderCCII(){
 
 /* ---- 5.5 FORECAST ---- */
 function renderForecast(){
-  const f=MODEL.forecast;
+  const f=MODEL.forecast, P=currentParams();
+  const card=(lab,val,cls='',sub='')=>`<div class="card rounded-2xl p-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">${lab}</p><p class="num text-xl font-bold mt-1 ${cls}">${val}</p>${sub?`<p class="text-[11px] text-ink-400">${sub}</p>`:''}</div>`;
+
+  // Tabella mensile dettagliata (righe = voci di flusso, colonne = mesi)
+  const righe = [
+    ['Incassi da clienti','incassi',1,''], ['Pagamenti fornitori','pagFornitori',-1,''], ['Pagamenti personale','pagPersonale',-1,''],
+    ['= Flusso operativo','operativo',1,'sub'], ['Oneri finanziari','oneriFin',-1,''], ['Imposte','imposte',-1,''],
+    ['Investimenti','investimenti',-1,''], ['Rimborso finanziamenti','rimborsi',-1,''], ['Nuovi finanziamenti','finanziamenti',1,''],
+    ['= Flusso netto del mese','netCF',1,'sub'], ['Saldo di cassa','balance',1,'sub']
+  ];
+  const k0 = v => v===0 ? '<span class="text-ink-400">–</span>' : fmtNum(v/1000,0);
+  const table = `<table class="w-full text-[12px] min-w-[900px]">
+      <thead><tr class="text-[10px] uppercase tracking-wider text-ink-400 border-b border-white/10">
+        <th class="text-left font-medium pb-2 pr-2">€ migliaia</th>${f.labels.map(l=>`<th class="text-right font-medium pb-2">${l.replace('Mese ','M')}</th>`).join('')}
+        <th class="text-right font-medium pb-2 pl-2">Totale</th></tr></thead>
+      <tbody>${righe.map(([lab,k,s,t])=>{
+        const vals=f[k].map(v=>v*s);
+        const tot = k==='balance' ? f.endCash : (f.tot[k]||0)*s;
+        return `<tr class="border-b border-white/5 ${t==='sub'?'bg-white/[.03] font-semibold text-ink-100':'text-ink-300'}">
+          <td class="py-1 pr-2 whitespace-nowrap">${lab}</td>
+          ${vals.map(v=>`<td class="py-1 text-right num ${v<0&&t==='sub'?'text-bad':''} ${k==='balance'&&v<f.cassaMin?'text-bad':''}">${k0(v)}</td>`).join('')}
+          <td class="py-1 pl-2 text-right num">${k0(tot)}</td></tr>`;
+      }).join('')}</tbody></table>`;
+
+  const avvisi = [];
+  if(f.minCash<0) avvisi.push(`<p class="text-[12px] text-bad">⚠ Il saldo proiettato scende sotto zero (minimo ${fmtEUR(f.minCash)} al mese ${f.minMonth}): prevedere copertura finanziaria o azioni sul capitale circolante (riduzione DSO, aumento DPO, gestione scorte).</p>`);
+  else if(f.cassaMin>0 && f.mesiSottoSoglia>0) avvisi.push(`<p class="text-[12px] text-warn">⚠ Per ${f.mesiSottoSoglia} ${f.mesiSottoSoglia===1?'mese':'mesi'} il saldo resta sotto la cassa minima di sicurezza (${fmtEUR(f.cassaMin)}).</p>`);
+
   document.querySelector('[data-pane="forecast"]').innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div class="card rounded-2xl p-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">Cassa iniziale</p><p class="num text-xl font-bold mt-1">${fmtEUR(f.startCash)}</p></div>
-      <div class="card rounded-2xl p-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">Cassa a 12 mesi</p><p class="num text-xl font-bold mt-1 ${f.endCash>=f.startCash?'text-ok':'text-warn'}">${fmtEUR(f.endCash)}</p></div>
-      <div class="card rounded-2xl p-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">Saldo minimo</p><p class="num text-xl font-bold mt-1 ${f.minCash<0?'text-bad':'text-ink-100'}">${fmtEUR(f.minCash)}</p><p class="text-[11px] text-ink-400">mese ${f.minMonth}</p></div>
-      <div class="card rounded-2xl p-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">Flusso operativo 12m</p><p class="num text-xl font-bold mt-1 ${f.operatingCF12>=0?'text-ok':'text-bad'}">${fmtEUR(f.operatingCF12)}</p></div>
+      ${card('Cassa iniziale', fmtEUR(f.startCash))}
+      ${card('Cassa a 12 mesi', fmtEUR(f.endCash), f.endCash>=f.startCash?'text-ok':'text-warn')}
+      ${card('Saldo minimo', fmtEUR(f.minCash), f.minCash<0?'text-bad':(f.minCash<f.cassaMin?'text-warn':'text-ink-100'), `mese ${f.minMonth}`)}
+      ${card('Flusso operativo 12m', fmtEUR(f.operatingCF12), f.operatingCF12>=0?'text-ok':'text-bad')}
     </div>
     <div class="card rounded-2xl p-5">
-      <div class="flex items-center justify-between mb-3">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h3 class="font-display text-lg">Proiezione saldo di cassa · 12 mesi</h3>
-        <span class="text-[11px] text-ink-400">Ipotesi: ricavi ${fmtSigned(FORECAST_IPOTESI.growth)}%, costi ${fmtSigned(FORECAST_IPOTESI.cost)}%, incasso ${FORECAST_IPOTESI.dso} gg, pagamento ${FORECAST_IPOTESI.dpo} gg</span>
+        <button class="no-print text-[11px] text-accent hover:underline" onclick="const d=document.getElementById('fcPanel');d.open=true;d.scrollIntoView({behavior:'smooth'})">⚙ Modifica parametri</button>
       </div>
       <div style="height:340px"><canvas id="cashChart"></canvas></div>
-      ${f.minCash<0?`<p class="text-[12px] text-bad mt-3">⚠ Il saldo proiettato scende sotto zero: prevedere copertura finanziaria o azioni sul capitale circolante (riduzione DSO, aumento DPO, gestione scorte).</p>`:''}
+      <div class="mt-3 space-y-1">${avvisi.join('')}</div>
+      <p class="text-[11px] text-ink-400 mt-3 leading-snug"><span class="text-ink-300">Ipotesi:</span> ${descrIpotesi(P)}${P.imposte===null?` (imposte da bilancio: ${fmtEUR(f.imposteAnno)})`:''}.</p>
+    </div>
+    <div class="card rounded-2xl p-5">
+      <h3 class="font-display text-lg mb-3">Budget di tesoreria mensile</h3>
+      <div class="overflow-x-auto">${table}</div>
+      <p class="text-[11px] text-ink-400 mt-3">Valori in migliaia di euro. Crediti e debiti commerciali di apertura sono incassati/pagati nei primi mesi secondo i giorni indicati; le vendite e gli acquisti futuri con lo stesso sfasamento.</p>
     </div>`;
   drawChart(f);
 }
-function drawChart(f){
+const CHART_THEME = { dark:{ legend:'#c7d2ea', tick:'#6b7ba3', grid:'rgba(255,255,255,.05)' },
+                      light:{ legend:'#111827', tick:'#374151', grid:'rgba(0,0,0,.08)' } };
+function drawChart(f, theme='dark'){
   const ctx=document.getElementById('cashChart');
   if(!ctx) return;
   if(chart) chart.destroy();
+  const T=CHART_THEME[theme];
   const neg = f.balance.some(v=>v<0);
+  const datasets=[{
+      type:'line', order:1,
+      label:'Saldo di cassa cumulato (€)',
+      data:[f.startCash,...f.balance],
+      borderColor: neg ? '#ef4444' : '#38bdf8',
+      backgroundColor:(c)=>{
+        const {ctx,chartArea}=c.chart; if(!chartArea) return 'rgba(56,189,248,.15)';
+        const g=ctx.createLinearGradient(0,chartArea.top,0,chartArea.bottom);
+        g.addColorStop(0, neg?'rgba(239,68,68,.30)':'rgba(56,189,248,.30)');
+        g.addColorStop(1,'rgba(56,189,248,0)'); return g;
+      },
+      fill:true, tension:.35, borderWidth:2.5,
+      pointRadius:3, pointBackgroundColor: neg?'#ef4444':'#38bdf8', pointHoverRadius:6,
+    },{
+      type:'bar', order:2,
+      label:'Flusso netto del mese (€)',
+      data:[null,...f.netCF],
+      backgroundColor: [null,...f.netCF].map(v=> v===null?'rgba(16,185,129,.55)':(v>=0?'rgba(16,185,129,.55)':'rgba(239,68,68,.55)')),
+      borderRadius:4, maxBarThickness:22,
+    }];
+  if(f.cassaMin>0) datasets.push({
+      type:'line', order:0, label:'Cassa minima di sicurezza',
+      data:new Array(13).fill(f.cassaMin), borderColor:'#f59e0b', borderDash:[6,4], borderWidth:1.5, pointRadius:0, fill:false });
   chart=new Chart(ctx,{
-    type:'line',
-    data:{
-      labels:['Inizio',...f.labels],
-      datasets:[{
-        label:'Saldo di cassa cumulato (€)',
-        data:[f.startCash,...f.balance],
-        borderColor: neg ? '#ef4444' : '#38bdf8',
-        backgroundColor:(c)=>{
-          const {ctx,chartArea}=c.chart; if(!chartArea) return 'rgba(56,189,248,.15)';
-          const g=ctx.createLinearGradient(0,chartArea.top,0,chartArea.bottom);
-          g.addColorStop(0, neg?'rgba(239,68,68,.30)':'rgba(56,189,248,.30)');
-          g.addColorStop(1,'rgba(56,189,248,0)'); return g;
-        },
-        fill:true, tension:.35, borderWidth:2.5,
-        pointRadius:3, pointBackgroundColor: neg?'#ef4444':'#38bdf8', pointHoverRadius:6,
-      }]
-    },
+    data:{ labels:['Inizio',...f.labels], datasets },
     options:{
-      responsive:true, maintainAspectRatio:false,
+      responsive:true, maintainAspectRatio:false, animation: theme==='light'?false:undefined,
       plugins:{
-        legend:{ labels:{ color:'#c7d2ea', font:{family:'Manrope'} } },
-        tooltip:{ callbacks:{ label:(c)=>' '+fmtEUR(c.parsed.y) }, backgroundColor:'#0b1220', borderColor:'#27406e', borderWidth:1 }
+        legend:{ labels:{ color:T.legend, font:{family:'Manrope'} } },
+        tooltip:{ callbacks:{ label:(c)=>' '+c.dataset.label.replace(' (€)','')+': '+fmtEUR(c.parsed.y) }, backgroundColor:'#0b1220', borderColor:'#27406e', borderWidth:1 }
       },
       scales:{
-        x:{ grid:{color:'rgba(255,255,255,.05)'}, ticks:{color:'#6b7ba3', font:{family:'JetBrains Mono'}} },
-        y:{ grid:{color:'rgba(255,255,255,.05)'}, ticks:{color:'#6b7ba3', font:{family:'JetBrains Mono'},
+        x:{ grid:{color:T.grid}, ticks:{color:T.tick, font:{family:'JetBrains Mono'}} },
+        y:{ grid:{color:T.grid}, ticks:{color:T.tick, font:{family:'JetBrains Mono'},
             callback:(v)=> new Intl.NumberFormat('it-IT',{notation:'compact'}).format(v)+' €' } }
       }
     }
@@ -1250,38 +1648,65 @@ function buildExportData(){
     societa: M.meta.name || null,
     esercizi: { corrente:{ anno:M.meta.yearCurr, data:M.meta.dateCurr }, precedente:{ anno:M.meta.yearPrev||null, data:M.meta.datePrev } },
     settoreCCII: M.ccii.settore,
-    ipotesiForecast: FORECAST_IPOTESI,
+    ipotesiForecast: readForecastParams(),
+    ipotesiVariabilitaCosti: { ...VARIAB },
     prospetti: { statoPatrimonialeAttivo:voci(PR.attivo), statoPatrimonialePassivo:voci(PR.passivo), contoEconomico:voci(PR.contoEconomico) },
     datiEstratti: { corrente:M.c, precedente:PARSED.prior },
     riclassificazione: M.riclass,
     indici: { ...indici, ebit:M.indici.ebit, ricavi:M.indici.ricavi, utile:M.indici.utile },
     rendicontoFinanziario: M.rendiconto,
+    contoEconomicoValoreAggiunto: ceVAExport(M.ceRiclass.curr),
+    contoEconomicoValoreAggiuntoPrecedente: ceVAExport(M.ceRiclass.prev),
+    contoEconomicoMargineContribuzione: ceMdCExport(M.ceRiclass.curr),
+    contoEconomicoMargineContribuzionePrecedente: ceMdCExport(M.ceRiclass.prev),
     ccii: {
-      patrimonioNetto:M.ccii.PN, dscr:num(M.ccii.dscr), servizioDebito:M.ccii.debtService, cashFlow:M.ccii.cashFlowCCII,
+      patrimonioNetto:M.ccii.PN, dscr:num(M.ccii.dscr), cassaDisponibilePerDebito:num(M.ccii.cassaPerDebito),
+      servizioDebito:num(M.ccii.debtService), quoteCapitale:num(M.ccii.quoteCapitale), cashFlow:M.ccii.cashFlowCCII,
       indiciSettoriali: M.ccii.indici.map(x=>({ indice:x.lab, formula:x.sub, valore:num(x.v), soglia:x.soglia, alertSe:x.dir+' soglia', alert:x.alert })),
       tutteLeSoglieSuperate:M.ccii.allFive, verdetto:M.ccii.crisiVerdetto, livello:STATUS[M.ccii.crisiLivello].lab
     },
     forecast: {
       cassaIniziale:M.forecast.startCash, cassaFinale:num(M.forecast.endCash), saldoMinimo:num(M.forecast.minCash),
       meseSaldoMinimo:M.forecast.minMonth, flussoOperativo12m:num(M.forecast.operatingCF12),
-      mesi: M.forecast.labels.map((l,i)=>({ mese:l, incassi:num(M.forecast.incassi[i]), pagamenti:num(M.forecast.pagamenti[i]),
-                                          flussoNetto:num(M.forecast.netCF[i]), saldo:num(M.forecast.balance[i]) }))
+      cassaMinimaSicurezza:M.forecast.cassaMin, mesiSottoSoglia:M.forecast.mesiSottoSoglia, imposteConsiderate:num(M.forecast.imposteAnno),
+      mesi: M.forecast.labels.map((l,i)=>{ const o={ mese:l }; for(const [k] of FC_ROWS) o[k]=num(M.forecast[k][i]); return o; })
     },
     relazione: { giudizio:STATUS[M.report.overall].lab, sintesi:M.report.overallTxt,
                  paragrafi:M.report.paragrafi.map(p=>({ titolo:p.titolo, esito:STATUS[p.livello]?STATUS[p.livello].lab:null, testo:p.testo })) }
   };
 }
 
+// Voci del budget di tesoreria (chiave, etichetta, segno per la presentazione)
+const FC_ROWS = [['incassi','Incassi da clienti',1],['pagFornitori','Pagamenti fornitori',-1],['pagPersonale','Pagamenti personale',-1],
+  ['operativo','Flusso operativo',1],['oneriFin','Oneri finanziari',-1],['imposte','Imposte',-1],['investimenti','Investimenti',-1],
+  ['rimborsi','Rimborso finanziamenti',-1],['finanziamenti','Nuovi finanziamenti',1],['netCF','Flusso netto',1],['balance','Saldo di cassa',1]];
+
+function ceVAExport(a){
+  if(!a) return null;
+  return { valoreProduzione:num(a.VP), costiEsterni:num(a.costiEsterni),
+           dettaglioCostiEsterni:{ materie:num(a.det.materie), servizi:num(a.det.servizi), godimentoBeniTerzi:num(a.det.godimento),
+                                   oneriDiversi:num(a.det.oneriDiversi), altriNonDettagliati:num(a.det.altriEsterni) },
+           valoreAggiunto:num(a.VA), costoPersonale:num(a.pers), MOL:num(a.MOL), ammortamenti:num(a.amm), accantonamenti:num(a.acc),
+           EBIT:num(a.EBIT), gestioneFinanziaria:num(a.gestFin), rettifiche:num(a.rett), altreComponenti:num(a.altreComp),
+           risultatoAnteImposte:num(a.ante), imposte:num(a.imposte), utile:num(a.utile) };
+}
+function ceMdCExport(a){
+  if(!a) return null;
+  return { valoreProduzione:num(a.VP), costiVariabili:num(a.CV),
+           dettaglioCostiVariabili:Object.fromEntries(Object.entries(a.cv).map(([k,v])=>[k,num(v)])),
+           margineContribuzione:num(a.MdC), margineContribuzionePct:num(a.mdcPct), costiFissiMonetari:num(a.CFissiMonetari),
+           ammortamentiAccantonamenti:num(a.amm+a.acc), costiFissiTotali:num(a.CF), EBIT:num(a.EBIT),
+           puntoDiPareggio:num(a.BEP), margineSicurezzaPct:num(a.margineSicurezza), levaOperativa:num(a.levaOperativa) };
+}
+
 function exportJSON(){
   saveBlob(new Blob([JSON.stringify(buildExportData(), null, 2)],{type:'application/json'}), 'analisi', 'json');
 }
 
-function exportPDF(){
-  // Tutte le sezioni vengono mostrate dal CSS di stampa: ridimensiona il grafico prima di stampare
-  if(chart) chart.resize(700, 340);
-  window.print();
-}
-window.addEventListener('afterprint', ()=>{ if(chart) chart.resize(); });
+function exportPDF(){ window.print(); }
+// Stampa (pulsante o Ctrl+P): il CSS mostra tutte le sezioni su sfondo bianco; il grafico viene ridisegnato con colori chiari
+window.addEventListener('beforeprint', ()=>{ if(MODEL){ drawChart(MODEL.forecast,'light'); if(chart) chart.resize(700,340); } });
+window.addEventListener('afterprint',  ()=>{ if(MODEL) drawChart(MODEL.forecast,'dark'); });
 
 function exportExcel(){
   if(typeof XLSX==='undefined'){ alert('Libreria Excel non disponibile (verifica la connessione). Usa l’esportazione JSON.'); return; }
@@ -1303,6 +1728,9 @@ function exportExcel(){
     ['Ricavi', M.indici.ricavi], ['EBIT', M.indici.ebit], ['Utile d’esercizio', M.indici.utile], ['Patrimonio netto', M.riclass.PN],
     ['ROE %', D.indici.ROE.valore], ['ROI %', D.indici.ROI.valore], ['ROS %', D.indici.ROS.valore],
     ['Current ratio', D.indici.currentRatio.valore], ['Quick ratio', D.indici.quickRatio.valore],
+    ['Valore aggiunto', D.contoEconomicoValoreAggiunto.valoreAggiunto], ['MOL (EBITDA)', D.contoEconomicoValoreAggiunto.MOL],
+    ['Margine di contribuzione %', D.contoEconomicoMargineContribuzione.margineContribuzionePct],
+    ['Punto di pareggio', D.contoEconomicoMargineContribuzione.puntoDiPareggio],
     ['DSCR (stima)', D.ccii.dscr], ['Alert CCII (su 5)', M.ccii.indici.filter(x=>x.alert).length], ['Cassa a 12 mesi', D.forecast.cassaFinale],
   ], [28,90]);
 
@@ -1326,6 +1754,47 @@ function exportExcel(){
     ['Passività correnti', r.passBreve, (p.debitiBreve||0)+(p.rateiPassivi||0)],
   ]);
 
+  const va=D.contoEconomicoValoreAggiunto, vap=D.contoEconomicoValoreAggiuntoPrecedente||{}, vd=va.dettaglioCostiEsterni, vpd=vap.dettaglioCostiEsterni||{};
+  const pv = (x)=> (x===null||x===undefined||!va.valoreProduzione) ? null : num(x/va.valoreProduzione*100);
+  const neg = x => (x===null||x===undefined) ? null : -x;
+  add('CE Valore aggiunto', [['Voce', yc, yp, '% su VP'],
+    ['Valore della produzione', va.valoreProduzione, vap.valoreProduzione??null, pv(va.valoreProduzione)],
+    ['− Costi esterni', -va.costiEsterni, neg(vap.costiEsterni), pv(-va.costiEsterni)],
+    ['   materie prime e merci (± var. rimanenze)', -vd.materie, neg(vpd.materie), pv(-vd.materie)],
+    ['   servizi', -vd.servizi, neg(vpd.servizi), pv(-vd.servizi)],
+    ['   godimento beni di terzi', -vd.godimentoBeniTerzi, neg(vpd.godimentoBeniTerzi), pv(-vd.godimentoBeniTerzi)],
+    ['   oneri diversi di gestione', -vd.oneriDiversi, neg(vpd.oneriDiversi), pv(-vd.oneriDiversi)],
+    ['   altri costi esterni non dettagliati', -vd.altriNonDettagliati, neg(vpd.altriNonDettagliati), pv(-vd.altriNonDettagliati)],
+    ['= Valore aggiunto', va.valoreAggiunto, vap.valoreAggiunto??null, pv(va.valoreAggiunto)],
+    ['− Costo del personale', -va.costoPersonale, neg(vap.costoPersonale), pv(-va.costoPersonale)],
+    ['= MOL (EBITDA)', va.MOL, vap.MOL??null, pv(va.MOL)],
+    ['− Ammortamenti e svalutazioni', -va.ammortamenti, neg(vap.ammortamenti), pv(-va.ammortamenti)],
+    ['− Accantonamenti', -va.accantonamenti, neg(vap.accantonamenti), pv(-va.accantonamenti)],
+    ['= Reddito operativo (EBIT)', va.EBIT, vap.EBIT??null, pv(va.EBIT)],
+    ['± Proventi e oneri finanziari', va.gestioneFinanziaria, vap.gestioneFinanziaria??null, pv(va.gestioneFinanziaria)],
+    ['± Rettifiche attività finanziarie', va.rettifiche, vap.rettifiche??null, pv(va.rettifiche)],
+    ['± Altre componenti (quadratura)', va.altreComponenti, vap.altreComponenti??null, pv(va.altreComponenti)],
+    ['= Risultato ante imposte', va.risultatoAnteImposte, vap.risultatoAnteImposte??null, pv(va.risultatoAnteImposte)],
+    ['− Imposte', -va.imposte, neg(vap.imposte), pv(-va.imposte)],
+    ['= Utile (perdita) d’esercizio', va.utile, vap.utile??null, pv(va.utile)],
+  ], [46,18,18,12]);
+
+  const mc=D.contoEconomicoMargineContribuzione, mcp=D.contoEconomicoMargineContribuzionePrecedente||{};
+  const cvLab={materie:'Materie prime e merci',servizi:'Servizi',godimento:'Godimento beni di terzi',oneriDiversi:'Oneri diversi di gestione',altriEsterni:'Altri costi esterni',personale:'Costo del personale'};
+  add('CE Margine contrib.', [['Voce', yc, yp, '% variabile'],
+    ['Valore della produzione', mc.valoreProduzione, mcp.valoreProduzione??null],
+    ['− Costi variabili', -mc.costiVariabili, neg(mcp.costiVariabili)],
+    ...Object.keys(cvLab).map(k=>['   '+cvLab[k], -mc.dettaglioCostiVariabili[k], mcp.dettaglioCostiVariabili?neg(mcp.dettaglioCostiVariabili[k]):null, VARIAB[k]]),
+    ['= Margine di contribuzione', mc.margineContribuzione, mcp.margineContribuzione??null],
+    ['− Costi fissi monetari', -mc.costiFissiMonetari, neg(mcp.costiFissiMonetari)],
+    ['− Ammortamenti e accantonamenti', -mc.ammortamentiAccantonamenti, neg(mcp.ammortamentiAccantonamenti)],
+    ['= Reddito operativo (EBIT)', mc.EBIT, mcp.EBIT??null], [],
+    ['Margine di contribuzione %', mc.margineContribuzionePct, mcp.margineContribuzionePct??null],
+    ['Punto di pareggio (ricavi)', mc.puntoDiPareggio, mcp.puntoDiPareggio??null],
+    ['Margine di sicurezza %', mc.margineSicurezzaPct, mcp.margineSicurezzaPct??null],
+    ['Leva operativa', mc.levaOperativa, mcp.levaOperativa??null],
+  ], [40,18,18,12]);
+
   const nomi={ROE:'ROE %',ROI:'ROI %',ROS:'ROS %',currentRatio:'Current ratio',quickRatio:'Quick ratio',leverage:'Leverage',coperturaImm:'Copertura immobilizzazioni'};
   add('Indici', [['Indice','Valore','Esercizio prec.','Esito','Formula'],
     ...Object.keys(nomi).map(k=>[nomi[k], D.indici[k].valore, D.indici[k].precedente, D.indici[k].esito, D.indici[k].formula])], [28,14,16,14,55]);
@@ -1342,10 +1811,11 @@ function exportExcel(){
     ['Patrimonio netto', D.ccii.patrimonioNetto], ['DSCR (stima)', D.ccii.dscr], ['Servizio del debito', D.ccii.servizioDebito],
     ['Verdetto', D.ccii.verdetto]], [34,38,12,12,14,10]);
 
-  add('Forecast', [['Ipotesi', `Ricavi ${fmtSigned(FORECAST_IPOTESI.growth)}% · Costi ${fmtSigned(FORECAST_IPOTESI.cost)}% · Incasso ${FORECAST_IPOTESI.dso} gg · Pagamento ${FORECAST_IPOTESI.dpo} gg`], [],
-    ['Mese','Incassi','Pagamenti','Flusso netto','Saldo di cassa'],
-    ['Inizio',null,null,null,D.forecast.cassaIniziale],
-    ...D.forecast.mesi.map(m=>[m.mese,m.incassi,m.pagamenti,m.flussoNetto,m.saldo])], [14,16,16,16,16]);
+  const F=M.forecast;
+  add('Forecast', [['Ipotesi', descrIpotesi(readForecastParams())], ['Cassa iniziale', F.startCash], [],
+    ['Voce', ...F.labels, 'Totale'],
+    ...FC_ROWS.map(([k,lab,sg])=>[lab, ...F[k].map(v=>num(v*sg)), k==='balance'?num(F.endCash):num((F.tot[k]||0)*sg)])
+  ], [26,...new Array(13).fill(13)]);
 
   add('Relazione', [['Paragrafo','Esito','Testo'],
     ...D.relazione.paragrafi.flatMap(p=>p.testo.map((t,i)=>[i===0?p.titolo:'', i===0?p.esito:'', t]))], [32,14,120]);
@@ -1361,6 +1831,9 @@ function renderAll(){
   document.getElementById('companyName').textContent = MODEL.meta.name || 'Bilancio importato';
   document.getElementById('companyYears').textContent = `${MODEL.meta.yearCurr||'t'} vs ${MODEL.meta.yearPrev||'t-1'}`;
   document.querySelectorAll('.export-btn').forEach(b=>b.disabled=false);
+  // Suggerimenti dai dati di bilancio nel pannello parametri
+  document.querySelector('[data-fc="imposte"]').placeholder = 'bilancio: '+fmtNum(Math.max(0,MODEL.c.imposte||0));
+  document.getElementById('fcHintRimb').textContent = `Se 0, il DSCR usa i debiti finanziari entro 12 mesi da bilancio (${fmtEUR(MODEL.c.debitiFinBreve||0)}).`;
   renderDash(); renderProspetti(); renderIndici(); renderRendiconto(); renderCCII(); renderForecast(); renderReport();
 }
 
@@ -1389,6 +1862,24 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
 
 // Cambio settore -> ricalcolo indici CCII
 document.getElementById('sectorSel').addEventListener('input', recompute);
+
+// Pannello parametri flussi di cassa: ogni modifica ricalcola forecast, grafico, DSCR e relazione
+writeForecastParams(FC_DEFAULT);
+document.querySelectorAll('[data-fc]').forEach(el=>el.addEventListener('input', ()=>{ updFcLabels(); recompute(); }));
+document.getElementById('fcReset').addEventListener('click', ()=>{ writeForecastParams(FC_DEFAULT); recompute(); });
+
+// Ipotesi di variabilità dei costi (CE a margine di contribuzione): delega sul pannello, che viene ridisegnato
+const paneIndici = document.querySelector('[data-pane="indici"]');
+paneIndici.addEventListener('change', e=>{
+  const k = e.target.dataset && e.target.dataset.var;
+  if(!k) return;
+  VARIAB[k] = Math.min(100, Math.max(0, +e.target.value||0));
+  recompute();
+});
+paneIndici.addEventListener('click', e=>{
+  if(e.target.id==='variabReset'){ VARIAB = { ...VARIAB_DEFAULT }; recompute(); }
+});
+paneIndici.addEventListener('toggle', e=>{ if(e.target.id==='variabPanel') VARIAB_OPEN = e.target.open; }, true);
 
 // Pulsanti di esportazione
 document.querySelectorAll('.export-btn').forEach(btn=>{
@@ -1488,23 +1979,41 @@ const SAMPLE_XBRL = `<?xml version="1.0" encoding="UTF-8"?>
   <itcc-ci:TotalePassivo contextRef="C2023" unitRef="EUR">3520000</itcc-ci:TotalePassivo>
   <itcc-ci:TotalePassivo contextRef="C2022" unitRef="EUR">3230000</itcc-ci:TotalePassivo>
 
-  <!-- CONTO ECONOMICO -->
+  <!-- CONTO ECONOMICO (schema art. 2425 c.c.) -->
   <itcc-ci:RicaviVenditePrestazioni contextRef="D2023" unitRef="EUR">4250000</itcc-ci:RicaviVenditePrestazioni>
   <itcc-ci:RicaviVenditePrestazioni contextRef="D2022" unitRef="EUR">3980000</itcc-ci:RicaviVenditePrestazioni>
+  <itcc-ci:TotaleAltriRicaviProventi contextRef="D2023" unitRef="EUR">60000</itcc-ci:TotaleAltriRicaviProventi>
+  <itcc-ci:TotaleAltriRicaviProventi contextRef="D2022" unitRef="EUR">40000</itcc-ci:TotaleAltriRicaviProventi>
   <itcc-ci:TotaleValoreProduzione contextRef="D2023" unitRef="EUR">4310000</itcc-ci:TotaleValoreProduzione>
   <itcc-ci:TotaleValoreProduzione contextRef="D2022" unitRef="EUR">4020000</itcc-ci:TotaleValoreProduzione>
+  <itcc-ci:MateriePrimeSussidiarieConsumoMerci contextRef="D2023" unitRef="EUR">1850000</itcc-ci:MateriePrimeSussidiarieConsumoMerci>
+  <itcc-ci:MateriePrimeSussidiarieConsumoMerci contextRef="D2022" unitRef="EUR">1720000</itcc-ci:MateriePrimeSussidiarieConsumoMerci>
+  <itcc-ci:Servizi contextRef="D2023" unitRef="EUR">720000</itcc-ci:Servizi>
+  <itcc-ci:Servizi contextRef="D2022" unitRef="EUR">670000</itcc-ci:Servizi>
+  <itcc-ci:GodimentoBeniTerzi contextRef="D2023" unitRef="EUR">95000</itcc-ci:GodimentoBeniTerzi>
+  <itcc-ci:GodimentoBeniTerzi contextRef="D2022" unitRef="EUR">90000</itcc-ci:GodimentoBeniTerzi>
+  <itcc-ci:TotaleCostiPerIlPersonale contextRef="D2023" unitRef="EUR">980000</itcc-ci:TotaleCostiPerIlPersonale>
+  <itcc-ci:TotaleCostiPerIlPersonale contextRef="D2022" unitRef="EUR">920000</itcc-ci:TotaleCostiPerIlPersonale>
+  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2023" unitRef="EUR">240000</itcc-ci:TotaleAmmortamentiSvalutazioni>
+  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2022" unitRef="EUR">220000</itcc-ci:TotaleAmmortamentiSvalutazioni>
+  <itcc-ci:VariazioniRimanenzeMateriePrimeSussidiarieConsumoMerci contextRef="D2023" unitRef="EUR">-20000</itcc-ci:VariazioniRimanenzeMateriePrimeSussidiarieConsumoMerci>
+  <itcc-ci:VariazioniRimanenzeMateriePrimeSussidiarieConsumoMerci contextRef="D2022" unitRef="EUR">-15000</itcc-ci:VariazioniRimanenzeMateriePrimeSussidiarieConsumoMerci>
+  <itcc-ci:AccantonamentiRischi contextRef="D2023" unitRef="EUR">15000</itcc-ci:AccantonamentiRischi>
+  <itcc-ci:AccantonamentiRischi contextRef="D2022" unitRef="EUR">10000</itcc-ci:AccantonamentiRischi>
+  <itcc-ci:OneriDiversiGestione contextRef="D2023" unitRef="EUR">150000</itcc-ci:OneriDiversiGestione>
+  <itcc-ci:OneriDiversiGestione contextRef="D2022" unitRef="EUR">145000</itcc-ci:OneriDiversiGestione>
   <itcc-ci:TotaleCostiProduzione contextRef="D2023" unitRef="EUR">4030000</itcc-ci:TotaleCostiProduzione>
   <itcc-ci:TotaleCostiProduzione contextRef="D2022" unitRef="EUR">3760000</itcc-ci:TotaleCostiProduzione>
   <itcc-ci:DifferenzaValoreCostiProduzione contextRef="D2023" unitRef="EUR">280000</itcc-ci:DifferenzaValoreCostiProduzione>
   <itcc-ci:DifferenzaValoreCostiProduzione contextRef="D2022" unitRef="EUR">260000</itcc-ci:DifferenzaValoreCostiProduzione>
-  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2023" unitRef="EUR">240000</itcc-ci:TotaleAmmortamentiSvalutazioni>
-  <itcc-ci:TotaleAmmortamentiSvalutazioni contextRef="D2022" unitRef="EUR">220000</itcc-ci:TotaleAmmortamentiSvalutazioni>
-  <itcc-ci:TotaleCostiPerIlPersonale contextRef="D2023" unitRef="EUR">980000</itcc-ci:TotaleCostiPerIlPersonale>
   <itcc-ci:TotaleInteressiAltriOneriFinanziari contextRef="D2023" unitRef="EUR">96000</itcc-ci:TotaleInteressiAltriOneriFinanziari>
   <itcc-ci:TotaleInteressiAltriOneriFinanziari contextRef="D2022" unitRef="EUR">82000</itcc-ci:TotaleInteressiAltriOneriFinanziari>
+  <itcc-ci:TotaleProventiOneriFinanziari contextRef="D2023" unitRef="EUR">-96000</itcc-ci:TotaleProventiOneriFinanziari>
+  <itcc-ci:TotaleProventiOneriFinanziari contextRef="D2022" unitRef="EUR">-82000</itcc-ci:TotaleProventiOneriFinanziari>
   <itcc-ci:RisultatoPrimaImposte contextRef="D2023" unitRef="EUR">184000</itcc-ci:RisultatoPrimaImposte>
   <itcc-ci:RisultatoPrimaImposte contextRef="D2022" unitRef="EUR">178000</itcc-ci:RisultatoPrimaImposte>
   <itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate contextRef="D2023" unitRef="EUR">58000</itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate>
+  <itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate contextRef="D2022" unitRef="EUR">60000</itcc-ci:TotaleImposteRedditoEsercizioCorrentiDifferiteAnticipate>
   <itcc-ci:UtilePerditaEsercizio contextRef="D2023" unitRef="EUR">126000</itcc-ci:UtilePerditaEsercizio>
   <itcc-ci:UtilePerditaEsercizio contextRef="D2022" unitRef="EUR">118000</itcc-ci:UtilePerditaEsercizio>
 </xbrli:xbrl>`;
